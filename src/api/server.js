@@ -14,6 +14,7 @@ const bcrypt = require('bcryptjs');
 const { version: APP_VERSION } = require('../../package.json');
 const { BotManager } = require('../engine/BotManager');
 const { AutoMod } = require('../engine/AutoMod');
+const { Scheduler } = require('../engine/Scheduler');
 const { personalityPresets } = require('../engine/PersonalityPresets');
 const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser, requestIdMiddleware } = require('../middleware/security');
 const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
@@ -26,6 +27,7 @@ const {
     validateUpdateBotConfig,
     validateBotIdParam,
     validateBotTools,
+    validateBotSchedule,
     sanitizeObject
 } = require('../middleware/validation');
 const { errorHandler } = require('../middleware/errorHandler');
@@ -60,6 +62,7 @@ const JWT_SECRET = JWT_SECRET_ENV || `botforge-secret-change-me-${uuidv4()}`;
 const IS_DEFAULT_JWT = !JWT_SECRET_ENV;
 
 const botManager = new BotManager();
+const scheduler = new Scheduler({ botManager, logBotEvent });
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -187,6 +190,10 @@ botManager.on('uptime', (payload) => {
 
 botManager.on('automod', (payload) => {
     emitToUser(payload.userId, 'bot_automod', payload);
+});
+
+scheduler.on('schedule', (payload) => {
+    emitToUser(payload.userId, 'bot_schedule', payload);
 });
 
 function findUserBot(userId, botId) {
@@ -386,6 +393,7 @@ app.post('/api/bots', auth, validateCreateBot, (req, res) => {
         logBotEvent(config.id, 'created', 'Bot created');
 
         botManager.createBot(storedConfig);
+        scheduler.registerBot(storedConfig);
 
         res.json({ bot: maskBotForResponse(storedConfig) });
     } catch (err) {
@@ -465,6 +473,55 @@ app.patch('/api/bots/:id/config', auth, validateBotIdParam, validateUpdateBotCon
     }
 });
 
+// Get bot schedule
+app.get('/api/bots/:id/schedule', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        res.json({ schedule: config.schedule || null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update bot schedule
+app.put('/api/bots/:id/schedule', auth, validateBotIdParam, validateBotSchedule, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const schedule = req.schedule;
+        updateBotRecord(req.userId, req.params.id, { schedule });
+        logBotEvent(req.params.id, 'schedule-updated', 'Schedule updated');
+
+        scheduler.setSchedule(req.params.id, schedule, { userId: config.userId, name: config.name });
+        scheduler.checkNow(req.params.id).catch((err) => {
+            console.warn('[BotForge] Schedule check failed:', err.message);
+        });
+
+        res.json({ schedule });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Remove bot schedule
+app.delete('/api/bots/:id/schedule', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        updateBotRecord(req.userId, req.params.id, { schedule: null });
+        logBotEvent(req.params.id, 'schedule-removed', 'Schedule removed');
+        scheduler.removeSchedule(req.params.id);
+
+        res.json({ schedule: null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Get automod config
 app.get('/api/bots/:id/automod', auth, validateBotIdParam, (req, res) => {
     try {
@@ -535,6 +592,7 @@ app.delete('/api/bots/:id', auth, validateBotIdParam, async (req, res) => {
         if (!config) return res.status(404).json({ error: 'Bot not found' });
         
         await botManager.removeBot(req.params.id);
+        scheduler.unregisterBot(req.params.id);
         deleteBotRecord(req.userId, req.params.id);
         
         res.json({ success: true });
@@ -685,12 +743,16 @@ async function bootstrapBots() {
     for (const config of configs) {
         try {
             await botManager.createBot(config);
+            scheduler.registerBot(config);
         } catch (err) {
             console.error(`[BotForge] Failed to load bot ${config.id}:`, err.message);
         }
     }
 
+    scheduler.start();
+
     for (const config of configs) {
+        if (config.schedule) continue;
         const lastStatus = getLatestBotStatusEvent(config.id);
         if (lastStatus?.eventType === 'started') {
             try {
@@ -739,6 +801,8 @@ async function shutdown(signal) {
     } catch (err) {
         console.error('[BotForge] Error while stopping bots:', err.message);
     }
+
+    scheduler.stop();
 
     await serverClose;
     process.exit(0);

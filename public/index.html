@@ -249,6 +249,13 @@
         .flash-success{animation:configFlash 0.8s ease}
         @keyframes configFlash{0%{box-shadow:0 0 0 0 rgba(16,185,129,0.7);background:rgba(16,185,129,0.12)}100%{box-shadow:0 0 0 12px rgba(16,185,129,0);background:transparent}}
 
+        /* Schedule */
+        .schedule-panel{display:grid;gap:14px}
+        .schedule-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+        .schedule-preview{background:#09090B;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--light)}
+        .schedule-preview strong{color:var(--white)}
+        .schedule-note{font-size:11px;color:var(--gray);margin-top:4px}
+
         /* AutoMod */
         .automod-grid{display:grid;grid-template-columns:1.15fr 0.85fr;gap:14px}
         .automod-card{background:#09090B;border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:12px}
@@ -706,6 +713,96 @@
                     </div>
                 </div>
             </div>
+            <div class="detail-section full" id="scheduleSection">
+                <div class="detail-section-header">
+                    <h4>Schedule</h4>
+                    <button class="primary-btn" onclick="saveSchedule()">Save Schedule</button>
+                </div>
+                <div class="schedule-panel" id="schedulePanel">
+                    <div>
+                        <div class="config-label">Mode</div>
+                        <div class="toggle-group" id="scheduleModeGroup">
+                            <label class="toggle-pill">
+                                <input type="radio" name="scheduleMode" value="always" checked>
+                                <span>Always On</span>
+                            </label>
+                            <label class="toggle-pill">
+                                <input type="radio" name="scheduleMode" value="scheduled">
+                                <span>Scheduled</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="scheduleConfig">
+                        <div>
+                            <div class="config-label">Schedule Type</div>
+                            <div class="toggle-group" id="scheduleTypeGroup">
+                                <label class="toggle-pill">
+                                    <input type="radio" name="scheduleType" value="daily" checked>
+                                    <span>Daily</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="radio" name="scheduleType" value="weekly">
+                                    <span>Weekly</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="radio" name="scheduleType" value="cron">
+                                    <span>Custom Cron</span>
+                                </label>
+                            </div>
+                            <div class="schedule-note">All times run in UTC. Cron expressions are evaluated each minute.</div>
+                        </div>
+                        <div class="schedule-row" id="scheduleTimeRow">
+                            <div>
+                                <div class="config-label">Start Time (UTC)</div>
+                                <input type="time" id="scheduleStart" value="09:00" step="60">
+                            </div>
+                            <div>
+                                <div class="config-label">Stop Time (UTC)</div>
+                                <input type="time" id="scheduleStop" value="23:00" step="60">
+                            </div>
+                        </div>
+                        <div id="scheduleDaysRow">
+                            <div class="config-label">Days of Week</div>
+                            <div class="toggle-group" id="scheduleDays">
+                                <label class="toggle-pill">
+                                    <input type="checkbox" name="scheduleDay" value="1" checked>
+                                    <span>Mon</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" name="scheduleDay" value="2" checked>
+                                    <span>Tue</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" name="scheduleDay" value="3" checked>
+                                    <span>Wed</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" name="scheduleDay" value="4" checked>
+                                    <span>Thu</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" name="scheduleDay" value="5" checked>
+                                    <span>Fri</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" name="scheduleDay" value="6">
+                                    <span>Sat</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" name="scheduleDay" value="0">
+                                    <span>Sun</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="scheduleCronRow">
+                            <div class="config-label">Cron Expression (UTC)</div>
+                            <input type="text" id="scheduleCron" placeholder="*/5 * * * *">
+                            <div class="schedule-note">Use 5-field cron (minute hour day month day-of-week).</div>
+                        </div>
+                    </div>
+                    <div class="schedule-preview" id="schedulePreview">Schedule preview will appear here.</div>
+                </div>
+            </div>
             <div class="detail-section full" id="automodSection">
                 <div class="detail-section-header">
                     <h4>Auto-Mod</h4>
@@ -832,6 +929,11 @@ let conversationState = {
     limit: 50,
     query: '',
     hasMore: true,
+    loading: false
+};
+let scheduleState = {
+    botId: null,
+    schedule: null,
     loading: false
 };
 let automodState = {
@@ -1092,6 +1194,7 @@ async function showDashboard() {
     if (currentUser) document.getElementById('userName').textContent = currentUser.name || currentUser.email;
     showPage('bots');
     updateSettings(currentBots);
+    bindScheduleEvents();
     loadTemplates();
     await refreshBots();
     initSocket();
@@ -1205,6 +1308,7 @@ function initSocket() {
     socket.on('bot_status', handleBotStatusEvent);
     socket.on('bot_message', handleBotMessageEvent);
     socket.on('bot_error', handleBotErrorEvent);
+    socket.on('bot_schedule', handleBotScheduleEvent);
     socket.on('bot_automod', handleBotAutomodEvent);
 }
 
@@ -1308,6 +1412,18 @@ function handleBotErrorEvent(payload) {
     if (consumePendingToast(payload.botId, 'error')) return;
     const name = payload.name || 'Bot';
     showToast(`${name} error: ${payload.message || 'Unknown issue'}`, 'error');
+}
+
+function handleBotScheduleEvent(payload) {
+    if (!payload || !payload.botId) return;
+    const name = payload.name || 'Bot';
+    if (payload.action === 'start') {
+        pendingStatusToasts.set(payload.botId, { status: 'running', expires: Date.now() + 4000 });
+        showToast(`${name} started on schedule ⏰`);
+    } else if (payload.action === 'stop') {
+        pendingStatusToasts.set(payload.botId, { status: 'stopped', expires: Date.now() + 4000 });
+        showToast(`${name} stopped on schedule ⏰`, 'error');
+    }
 }
 
 // ============ BOT ACTIONS ============
@@ -1666,6 +1782,7 @@ function closeBotDetail() {
     document.getElementById('botDetail').classList.remove('show');
     currentDetailBotId = null;
     activeDetailBotId = null;
+    resetScheduleState(null);
     resetAutomodState(null);
     if (analyticsChart) {
         analyticsChart.destroy();
@@ -1711,6 +1828,8 @@ function renderBotDetail(bot) {
     resetConversationState(bot.id);
     loadConversationLogs({ reset: true });
     populateConfigPanel(bot);
+    resetScheduleState(bot.id);
+    loadSchedule(bot.id);
     resetAutomodState(bot.id);
     loadAutomodConfig(bot.id);
     loadAutomodLogs({ reset: true });
@@ -2008,6 +2127,282 @@ async function applyLiveConfig() {
         await refreshBots();
         const updated = currentBots.find(b => b.id === activeDetailBotId);
         if (updated) renderBotDetail(updated);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+// ============ SCHEDULE ============
+
+let scheduleListenersBound = false;
+const SCHEDULE_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function bindScheduleEvents() {
+    if (scheduleListenersBound) return;
+    scheduleListenersBound = true;
+
+    document.querySelectorAll('input[name="scheduleMode"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            updateScheduleVisibility();
+            updateSchedulePreview();
+        });
+    });
+
+    document.querySelectorAll('input[name="scheduleType"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            updateScheduleVisibility();
+            updateSchedulePreview();
+        });
+    });
+
+    const watchIds = ['scheduleStart', 'scheduleStop', 'scheduleCron'];
+    watchIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', updateSchedulePreview);
+    });
+
+    document.querySelectorAll('input[name="scheduleDay"]').forEach((input) => {
+        input.addEventListener('change', updateSchedulePreview);
+    });
+
+    updateScheduleVisibility();
+    updateSchedulePreview();
+}
+
+function resetScheduleState(botId) {
+    scheduleState.botId = botId;
+    scheduleState.schedule = null;
+    scheduleState.loading = false;
+    setScheduleMode('always');
+    setScheduleType('daily');
+    setScheduleTimes('09:00', '23:00');
+    setScheduleDays([1, 2, 3, 4, 5]);
+    setScheduleCron('');
+    updateScheduleVisibility();
+    updateSchedulePreview();
+}
+
+function getScheduleMode() {
+    return document.querySelector('input[name="scheduleMode"]:checked')?.value || 'always';
+}
+
+function setScheduleMode(mode) {
+    document.querySelectorAll('input[name="scheduleMode"]').forEach((input) => {
+        input.checked = input.value === mode;
+    });
+}
+
+function getScheduleType() {
+    return document.querySelector('input[name="scheduleType"]:checked')?.value || 'daily';
+}
+
+function setScheduleType(type) {
+    document.querySelectorAll('input[name="scheduleType"]').forEach((input) => {
+        input.checked = input.value === type;
+    });
+}
+
+function setScheduleTimes(start, stop) {
+    const startEl = document.getElementById('scheduleStart');
+    const stopEl = document.getElementById('scheduleStop');
+    if (startEl && start) startEl.value = start;
+    if (stopEl && stop) stopEl.value = stop;
+}
+
+function setScheduleDays(days) {
+    const set = new Set(Array.isArray(days) ? days.map((d) => Number.parseInt(d, 10)) : []);
+    document.querySelectorAll('input[name="scheduleDay"]').forEach((input) => {
+        const value = Number.parseInt(input.value, 10);
+        input.checked = set.has(value);
+    });
+}
+
+function setScheduleCron(value) {
+    const el = document.getElementById('scheduleCron');
+    if (el) el.value = value || '';
+}
+
+function getSelectedDays() {
+    return Array.from(document.querySelectorAll('input[name="scheduleDay"]:checked'))
+        .map((input) => Number.parseInt(input.value, 10))
+        .filter((value) => Number.isInteger(value))
+        .sort((a, b) => a - b);
+}
+
+function updateScheduleVisibility() {
+    const mode = getScheduleMode();
+    const type = getScheduleType();
+    const config = document.getElementById('scheduleConfig');
+    const timeRow = document.getElementById('scheduleTimeRow');
+    const daysRow = document.getElementById('scheduleDaysRow');
+    const cronRow = document.getElementById('scheduleCronRow');
+
+    if (config) config.style.display = mode === 'scheduled' ? 'grid' : 'none';
+    if (timeRow) timeRow.style.display = mode === 'scheduled' && type !== 'cron' ? 'grid' : 'none';
+    if (daysRow) daysRow.style.display = mode === 'scheduled' && type === 'weekly' ? 'block' : 'none';
+    if (cronRow) cronRow.style.display = mode === 'scheduled' && type === 'cron' ? 'block' : 'none';
+}
+
+function formatTimeLabel(value) {
+    if (!value || !value.includes(':')) return '--';
+    const [hoursRaw, minutesRaw] = value.split(':');
+    let hours = Number.parseInt(hoursRaw, 10);
+    const minutes = Number.parseInt(minutesRaw, 10);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return value;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours %= 12;
+    if (hours === 0) hours = 12;
+    return `${hours}:${String(minutes).padStart(2, '0')} ${period}`;
+}
+
+function formatDaysLabel(days) {
+    if (!days.length) return 'No days selected';
+    const joined = days.join(',');
+    if (days.length === 7) return 'Daily';
+    if (joined === '1,2,3,4,5') return 'Mon-Fri';
+    if (joined === '0,6') return 'Weekends';
+    return days.map((day) => SCHEDULE_DAY_LABELS[day] || String(day)).join(', ');
+}
+
+function updateSchedulePreview() {
+    const preview = document.getElementById('schedulePreview');
+    if (!preview) return;
+    const mode = getScheduleMode();
+    if (mode === 'always') {
+        preview.innerHTML = '<strong>Always On</strong> — schedule disabled (bot runs 24/7).';
+        return;
+    }
+
+    const type = getScheduleType();
+    if (type === 'cron') {
+        const expression = document.getElementById('scheduleCron')?.value.trim() || '…';
+        preview.innerHTML = `Bot will run when cron matches: <strong>${esc(expression)}</strong> UTC.`;
+        return;
+    }
+
+    const start = document.getElementById('scheduleStart')?.value || '';
+    const stop = document.getElementById('scheduleStop')?.value || '';
+    const timeLabel = `${formatTimeLabel(start)} - ${formatTimeLabel(stop)} UTC`;
+
+    if (type === 'weekly') {
+        const days = getSelectedDays();
+        preview.innerHTML = `Bot will run: <strong>${esc(timeLabel)}</strong>, ${esc(formatDaysLabel(days))}.`;
+        return;
+    }
+
+    preview.innerHTML = `Bot will run: <strong>${esc(timeLabel)}</strong>, Daily.`;
+}
+
+function populateSchedulePanel(schedule) {
+    if (!schedule) {
+        setScheduleMode('always');
+        updateScheduleVisibility();
+        updateSchedulePreview();
+        return;
+    }
+
+    setScheduleMode('scheduled');
+    if (schedule.type === 'cron') {
+        setScheduleType('cron');
+        setScheduleCron(schedule.cron || '');
+    } else if (schedule.type === 'weekly') {
+        setScheduleType('weekly');
+        setScheduleTimes(schedule.startTime, schedule.stopTime);
+        setScheduleDays(schedule.days || []);
+    } else {
+        setScheduleType('daily');
+        setScheduleTimes(schedule.startTime, schedule.stopTime);
+    }
+
+    updateScheduleVisibility();
+    updateSchedulePreview();
+}
+
+async function loadSchedule(botId) {
+    if (!botId) return;
+    scheduleState.loading = true;
+    try {
+        const res = await fetch(`${API}/bots/${botId}/schedule`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load schedule');
+        scheduleState.schedule = data.schedule || null;
+        populateSchedulePanel(scheduleState.schedule);
+    } catch (err) {
+        console.error('Failed to load schedule:', err);
+        showToast('Error: ' + err.message, 'error');
+    } finally {
+        scheduleState.loading = false;
+    }
+}
+
+function buildSchedulePayload() {
+    const type = getScheduleType();
+    if (type === 'cron') {
+        const cron = document.getElementById('scheduleCron')?.value.trim() || '';
+        if (!cron) {
+            showToast('Cron expression required', 'error');
+            return null;
+        }
+        return { type: 'cron', cron };
+    }
+
+    const start = document.getElementById('scheduleStart')?.value || '';
+    const stop = document.getElementById('scheduleStop')?.value || '';
+    if (!start || !stop) {
+        showToast('Start and stop times are required', 'error');
+        return null;
+    }
+
+    if (type === 'weekly') {
+        const days = getSelectedDays();
+        if (!days.length) {
+            showToast('Select at least one day', 'error');
+            return null;
+        }
+        return { type: 'weekly', startTime: start, stopTime: stop, days };
+    }
+
+    return { type: 'daily', startTime: start, stopTime: stop };
+}
+
+async function saveSchedule() {
+    if (!activeDetailBotId) return;
+    if (scheduleState.loading) return;
+    const mode = getScheduleMode();
+
+    try {
+        if (mode === 'always') {
+            const res = await fetch(`${API}/bots/${activeDetailBotId}/schedule`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.status === 401) { logout(); return; }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to remove schedule');
+            scheduleState.schedule = null;
+            populateSchedulePanel(null);
+            showToast('Schedule removed ✅');
+        } else {
+            const payload = buildSchedulePayload();
+            if (!payload) return;
+            const res = await fetch(`${API}/bots/${activeDetailBotId}/schedule`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(payload)
+            });
+            if (res.status === 401) { logout(); return; }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to save schedule');
+            scheduleState.schedule = data.schedule || payload;
+            populateSchedulePanel(scheduleState.schedule);
+            showToast('Schedule saved ✅');
+        }
+
+        await refreshBots();
     } catch (err) {
         showToast('Error: ' + err.message, 'error');
     }

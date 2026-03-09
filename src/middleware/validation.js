@@ -23,6 +23,7 @@ const LIMITS = {
 const ALLOWED_PROVIDERS = new Set(['openai', 'anthropic']);
 const ALLOWED_TRIGGER_MODES = new Set(['mention', 'all', 'prefix']);
 const ALLOWED_COLLAB_MODES = new Set(['off', 'reactive', 'proactive']);
+const { normalizeSchedule } = require('../engine/Scheduler');
 
 function stripHtml(input) {
     return input.replace(/<[^>]*>/g, '');
@@ -329,6 +330,17 @@ function validateBotTools(req, res, next) {
     return next();
 }
 
+function validateBotSchedule(req, res, next) {
+    req.body = sanitizeObject(req.body || {});
+    const payload = req.body && Object.prototype.hasOwnProperty.call(req.body, 'schedule')
+        ? req.body.schedule
+        : req.body;
+    const { schedule, error } = normalizeSchedule(payload);
+    if (error) return badRequest(res, error);
+    req.schedule = schedule;
+    return next();
+}
+
 module.exports = {
     validateRegister,
     validateLogin,
@@ -337,5 +349,6 @@ module.exports = {
     validateUpdateBotConfig,
     validateBotIdParam,
     validateBotTools,
+    validateBotSchedule,
     sanitizeObject
 };

@@ -33,6 +33,7 @@ function ensureBotColumns(database) {
 
     addColumn('rate_limits_json', 'TEXT');
     addColumn('automod_config_json', 'TEXT');
+    addColumn('schedule_json', 'TEXT');
 }
 
 function initDatabase() {
@@ -76,6 +77,7 @@ function initDatabase() {
             tools_json TEXT NOT NULL,
             rate_limits_json TEXT,
             automod_config_json TEXT,
+            schedule_json TEXT,
             max_tokens INTEGER NOT NULL,
             history_limit INTEGER NOT NULL,
             created_at TEXT NOT NULL,
@@ -174,12 +176,12 @@ const statements = {
         INSERT INTO bots (
             id, user_id, name, discord_token_encrypted, ai_provider,
             ai_api_key_encrypted, model, personality, trigger_mode, prefix,
-            channels_json, tools_json, rate_limits_json, automod_config_json, max_tokens, history_limit,
+            channels_json, tools_json, rate_limits_json, automod_config_json, schedule_json, max_tokens, history_limit,
             created_at, updated_at
         ) VALUES (
             @id, @user_id, @name, @discord_token_encrypted, @ai_provider,
             @ai_api_key_encrypted, @model, @personality, @trigger_mode, @prefix,
-            @channels_json, @tools_json, @rate_limits_json, @automod_config_json, @max_tokens, @history_limit,
+            @channels_json, @tools_json, @rate_limits_json, @automod_config_json, @schedule_json, @max_tokens, @history_limit,
             @created_at, @updated_at
         )
     `),
@@ -197,6 +199,7 @@ const statements = {
             tools_json = @tools_json,
             rate_limits_json = @rate_limits_json,
             automod_config_json = @automod_config_json,
+            schedule_json = @schedule_json,
             max_tokens = @max_tokens,
             history_limit = @history_limit,
             updated_at = @updated_at
@@ -340,6 +343,7 @@ function mapBotRow(row) {
         tools: safeJsonParse(row.tools_json, []),
         rateLimits: safeJsonParse(row.rate_limits_json, null),
         automodConfig: safeJsonParse(row.automod_config_json, null),
+        schedule: safeJsonParse(row.schedule_json, null),
         maxTokens: row.max_tokens,
         historyLimit: row.history_limit,
         createdAt: new Date(row.created_at),
@@ -459,6 +463,7 @@ function createBot(config) {
         tools_json: JSON.stringify(toolsValue),
         rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         automod_config_json: config.automodConfig ? JSON.stringify(config.automodConfig) : null,
+        schedule_json: config.schedule ? JSON.stringify(config.schedule) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         created_at: createdAt,
@@ -505,6 +510,7 @@ function updateBot(userId, botId, updates) {
     if (hasProp('tools')) config.tools = updates.tools;
     if (hasProp('rateLimits')) config.rateLimits = updates.rateLimits;
     if (hasProp('automodConfig')) config.automodConfig = updates.automodConfig;
+    if (hasProp('schedule')) config.schedule = updates.schedule;
     if (hasProp('maxTokens')) config.maxTokens = updates.maxTokens;
     if (hasProp('historyLimit')) config.historyLimit = updates.historyLimit;
 
@@ -528,6 +534,7 @@ function updateBot(userId, botId, updates) {
         tools_json: JSON.stringify(toolsValue),
         rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         automod_config_json: config.automodConfig ? JSON.stringify(config.automodConfig) : null,
+        schedule_json: config.schedule ? JSON.stringify(config.schedule) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         updated_at: updatedAt.toISOString()
