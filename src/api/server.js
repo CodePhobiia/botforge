@@ -6,6 +6,7 @@
 const express = require('express');
 const fs = require('fs');
 const http = require('http');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
@@ -16,6 +17,7 @@ const { BotManager } = require('../engine/BotManager');
 const { AutoMod } = require('../engine/AutoMod');
 const { Scheduler } = require('../engine/Scheduler');
 const { personalityPresets } = require('../engine/PersonalityPresets');
+const { WebhookManager } = require('../engine/WebhookManager');
 const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser, requestIdMiddleware } = require('../middleware/security');
 const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
 const { buildDiscordAuthUrl, getDiscordRedirectUri, handleDiscordCallback } = require('../auth/discord-oauth');
@@ -26,17 +28,23 @@ const {
     validateUpdateBot,
     validateUpdateBotConfig,
     validateBotIdParam,
+    validateWebhookIdParam,
     validateBotTools,
     validateBotSchedule,
+    validateCreateWebhook,
+    validateUpdateWebhook,
     sanitizeObject
 } = require('../middleware/validation');
 const { errorHandler } = require('../middleware/errorHandler');
 const {
     createUser,
     getUserByEmail,
+    getUserById,
     createBot: createBotRecord,
     listBotsByUser,
     listAllBots,
+    listAllBotsWithUser,
+    listUsers,
     getBotById,
     updateBot: updateBotRecord,
     deleteBot: deleteBotRecord,
@@ -44,8 +52,14 @@ const {
     listSlashCommands,
     updateSlashCommand,
     deleteSlashCommand,
+    createWebhook,
+    listWebhooks,
+    updateWebhook,
+    deleteWebhook,
     logBotEvent,
     getLatestBotStatusEvent,
+    getUserCount,
+    getBotCount,
     recordBotMessageReceived,
     recordBotMessageSent,
     recordBotError,
@@ -64,9 +78,24 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const JWT_SECRET_ENV = process.env.JWT_SECRET;
 const JWT_SECRET = JWT_SECRET_ENV || `botforge-secret-change-me-${uuidv4()}`;
 const IS_DEFAULT_JWT = !JWT_SECRET_ENV;
+const WEBHOOK_EVENTS = [
+    'bot_started',
+    'bot_stopped',
+    'bot_error',
+    'message_received',
+    'automod_action',
+    'schedule_event'
+];
+const ADMIN_EMAILS = new Set(
+    (process.env.ADMIN_EMAILS || '')
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean)
+);
 
 const botManager = new BotManager();
 const scheduler = new Scheduler({ botManager, logBotEvent });
+const webhookManager = new WebhookManager({ listWebhooks, logger: console });
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
@@ -88,6 +117,31 @@ function maskBotForResponse(config, status = null) {
     const { discordToken, aiApiKey, updatedAt, ...rest } = config;
     const payload = status ? { ...rest, ...status } : rest;
     return { ...payload, discordToken: '***', aiApiKey: '***' };
+}
+
+function maskBotForAdmin(config, status = null) {
+    const masked = maskBotForResponse(config, status);
+    return {
+        ...masked,
+        userEmail: config.userEmail,
+        userName: config.userName
+    };
+}
+
+function normalizeWebhookEvents(events, { fallbackToAll = true } = {}) {
+    if (!Array.isArray(events) || events.length === 0) {
+        return fallbackToAll ? [...WEBHOOK_EVENTS] : [];
+    }
+    return events.filter((event) => WEBHOOK_EVENTS.includes(event));
+}
+
+function generateWebhookSecret() {
+    return crypto.randomBytes(24).toString('hex');
+}
+
+function isAdminEmail(email) {
+    if (!email) return false;
+    return ADMIN_EMAILS.has(String(email).toLowerCase());
 }
 
 function normalizeAutomodConfig(raw) {
@@ -172,12 +226,24 @@ function emitToUser(userId, event, payload) {
 
 botManager.on('status', (payload) => {
     emitToUser(payload.userId, 'bot_status', payload);
+    if (payload.status === 'running' && payload.previousStatus !== 'running') {
+        webhookManager.dispatch('bot_started', payload).catch((err) => {
+            console.warn('[WebhookManager] bot_started dispatch failed:', err.message);
+        });
+    } else if (payload.status === 'stopped' && payload.previousStatus !== 'stopped') {
+        webhookManager.dispatch('bot_stopped', payload).catch((err) => {
+            console.warn('[WebhookManager] bot_stopped dispatch failed:', err.message);
+        });
+    }
 });
 
 botManager.on('message', (payload) => {
     emitToUser(payload.userId, 'bot_message', payload);
     if (payload.direction === 'received') {
         recordBotMessageReceived(payload.botId, payload.command, payload.timestamp);
+        webhookManager.dispatch('message_received', payload).catch((err) => {
+            console.warn('[WebhookManager] message_received dispatch failed:', err.message);
+        });
     } else if (payload.direction === 'sent') {
         recordBotMessageSent(payload.botId, payload.count || 1, payload.timestamp);
     }
@@ -186,6 +252,9 @@ botManager.on('message', (payload) => {
 botManager.on('error', (payload) => {
     emitToUser(payload.userId, 'bot_error', payload);
     recordBotError(payload.botId, payload.timestamp);
+    webhookManager.dispatch('bot_error', payload).catch((err) => {
+        console.warn('[WebhookManager] bot_error dispatch failed:', err.message);
+    });
 });
 
 botManager.on('uptime', (payload) => {
@@ -194,10 +263,16 @@ botManager.on('uptime', (payload) => {
 
 botManager.on('automod', (payload) => {
     emitToUser(payload.userId, 'bot_automod', payload);
+    webhookManager.dispatch('automod_action', payload).catch((err) => {
+        console.warn('[WebhookManager] automod_action dispatch failed:', err.message);
+    });
 });
 
 scheduler.on('schedule', (payload) => {
     emitToUser(payload.userId, 'bot_schedule', payload);
+    webhookManager.dispatch('schedule_event', payload).catch((err) => {
+        console.warn('[WebhookManager] schedule_event dispatch failed:', err.message);
+    });
 });
 
 function findUserBot(userId, botId) {
@@ -415,10 +490,20 @@ function auth(req, res, next) {
     try {
         const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
         req.userId = decoded.userId;
+        req.userEmail = decoded.email || null;
         next();
     } catch (err) {
         res.status(401).json({ error: 'Invalid token' });
     }
+}
+
+function adminOnly(req, res, next) {
+    const email = req.userEmail || getUserById(req.userId)?.email || null;
+    if (!email || !isAdminEmail(email)) {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    req.userEmail = email;
+    return next();
 }
 
 // ============ TEMPLATES ============
@@ -605,6 +690,160 @@ app.delete('/api/bots/:id/schedule', auth, validateBotIdParam, (req, res) => {
         scheduler.removeSchedule(req.params.id);
 
         res.json({ schedule: null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============ WEBHOOKS ============
+
+app.get('/api/bots/:id/webhooks', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const webhooks = listWebhooks(config.id);
+        res.json({ webhooks });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/bots/:id/webhooks', auth, validateBotIdParam, validateCreateWebhook, async (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const { url, events, enabled, secret } = req.body || {};
+        const normalizedEvents = normalizeWebhookEvents(events);
+        const trimmedUrl = String(url || '').trim();
+        const finalSecret = (typeof secret === 'string' && secret.trim().length)
+            ? secret.trim()
+            : generateWebhookSecret();
+
+        const candidate = {
+            id: uuidv4(),
+            botId: config.id,
+            url: trimmedUrl,
+            events: normalizedEvents,
+            enabled: enabled !== undefined ? Boolean(enabled) : true,
+            secret: finalSecret,
+            createdAt: new Date()
+        };
+
+        const testResult = await webhookManager.sendTestWebhook({
+            webhook: candidate,
+            payload: {
+                botId: config.id,
+                userId: req.userId,
+                message: 'Webhook verification',
+                source: 'verify',
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        if (!testResult.ok) {
+            return res.status(400).json({ error: `Webhook verification failed: ${testResult.error || 'Delivery failed'}` });
+        }
+
+        const stored = createWebhook(candidate);
+        res.json({ webhook: stored });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/bots/:id/webhooks/:whId', auth, validateBotIdParam, validateWebhookIdParam, validateUpdateWebhook, async (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const existing = listWebhooks(config.id).find((hook) => hook.id === req.params.whId);
+        if (!existing) return res.status(404).json({ error: 'Webhook not found' });
+
+        const updates = {};
+        if (req.body.url !== undefined) {
+            updates.url = String(req.body.url).trim();
+        }
+        if (req.body.events !== undefined) {
+            updates.events = normalizeWebhookEvents(req.body.events, { fallbackToAll: false });
+        }
+        if (req.body.enabled !== undefined) {
+            updates.enabled = Boolean(req.body.enabled);
+        }
+        if (req.body.secret !== undefined) {
+            const trimmed = String(req.body.secret || '').trim();
+            updates.secret = trimmed ? trimmed : null;
+        }
+
+        if (updates.url && updates.url !== existing.url) {
+            const testResult = await webhookManager.sendTestWebhook({
+                webhook: {
+                    ...existing,
+                    ...updates,
+                    url: updates.url,
+                    secret: updates.secret ?? existing.secret
+                },
+                payload: {
+                    botId: config.id,
+                    userId: req.userId,
+                    message: 'Webhook verification',
+                    source: 'update',
+                    timestamp: new Date().toISOString()
+                }
+            });
+            if (!testResult.ok) {
+                return res.status(400).json({ error: `Webhook verification failed: ${testResult.error || 'Delivery failed'}` });
+            }
+        }
+
+        const updated = updateWebhook(config.id, req.params.whId, updates);
+        if (!updated) return res.status(404).json({ error: 'Webhook not found' });
+
+        res.json({ webhook: updated });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/bots/:id/webhooks/:whId', auth, validateBotIdParam, validateWebhookIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const deleted = deleteWebhook(config.id, req.params.whId);
+        if (!deleted) return res.status(404).json({ error: 'Webhook not found' });
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/bots/:id/webhooks/:whId/test', auth, validateBotIdParam, validateWebhookIdParam, async (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const webhook = listWebhooks(config.id).find((hook) => hook.id === req.params.whId);
+        if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+        const result = await webhookManager.sendTestWebhook({
+            webhook,
+            payload: {
+                botId: config.id,
+                userId: req.userId,
+                message: 'Manual webhook test',
+                source: 'manual',
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        if (!result.ok) {
+            return res.status(400).json({ error: `Webhook test failed: ${result.error || 'Delivery failed'}` });
+        }
+
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -927,6 +1166,52 @@ app.get('/api/bots/:id/conversations/export', auth, validateBotIdParam, (req, re
 // Platform stats
 app.get('/api/stats', (req, res) => {
     res.json({ stats: botManager.getStats() });
+});
+
+// ============ ADMIN ============
+
+app.get('/api/admin/stats', auth, adminOnly, (req, res) => {
+    try {
+        const stats = botManager.getStats();
+        res.json({
+            stats: {
+                totalUsers: getUserCount(),
+                totalBots: getBotCount(),
+                botsRunning: stats.running,
+                totalMessages: stats.totalMessages,
+                uptime: process.uptime()
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/admin/users', auth, adminOnly, (req, res) => {
+    try {
+        const users = listUsers();
+        res.json({ users });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/admin/bots', auth, adminOnly, (req, res) => {
+    try {
+        const configs = listAllBotsWithUser();
+        const bots = configs.map((config) => {
+            let status = null;
+            try {
+                status = botManager.getBotStatus(config.id);
+            } catch {
+                status = { status: 'stopped' };
+            }
+            return maskBotForAdmin(config, status);
+        });
+        res.json({ bots });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 async function bootstrapBots() {

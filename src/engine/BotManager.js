@@ -828,6 +828,7 @@ class BotInstance {
         if (this.restartAttempts >= this.maxRestartAttempts) {
             this.status = 'error';
             this.error = 'Max reconnect attempts reached.';
+            this._recordError(new Error(this.error));
             this._notifyStatus();
             return;
         }

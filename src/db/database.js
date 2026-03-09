@@ -149,6 +149,17 @@ function initDatabase() {
             FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS webhook_urls (
+            id TEXT PRIMARY KEY,
+            bot_id TEXT NOT NULL,
+            url TEXT NOT NULL,
+            events_json TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            secret TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id);
         CREATE INDEX IF NOT EXISTS idx_bot_logs_bot_id ON bot_logs(bot_id);
         CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_id ON conversation_logs(bot_id);
@@ -161,6 +172,7 @@ function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_automod_logs_violation ON automod_logs(bot_id, violation_type);
         CREATE INDEX IF NOT EXISTS idx_slash_commands_bot_id ON slash_commands(bot_id);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_slash_commands_bot_name ON slash_commands(bot_id, name);
+        CREATE INDEX IF NOT EXISTS idx_webhook_urls_bot_id ON webhook_urls(bot_id);
     `);
 
     ensureUserColumns(db);
@@ -179,6 +191,9 @@ const statements = {
     getUserByEmail: database.prepare('SELECT * FROM users WHERE email = ?'),
     getUserById: database.prepare('SELECT * FROM users WHERE id = ?'),
     getUserByDiscordId: database.prepare('SELECT * FROM users WHERE discord_id = ?'),
+    listUsers: database.prepare('SELECT * FROM users ORDER BY created_at ASC'),
+    countUsers: database.prepare('SELECT COUNT(*) as total FROM users'),
+    countBots: database.prepare('SELECT COUNT(*) as total FROM bots'),
     updateDiscordProfile: database.prepare(`
         UPDATE users SET
             discord_id = @discord_id,
@@ -224,6 +239,12 @@ const statements = {
     listBotsByUser: database.prepare('SELECT * FROM bots WHERE user_id = ? ORDER BY created_at ASC'),
     getBotById: database.prepare('SELECT * FROM bots WHERE id = ? AND user_id = ?'),
     listAllBots: database.prepare('SELECT * FROM bots ORDER BY created_at ASC'),
+    listAllBotsWithUser: database.prepare(`
+        SELECT bots.*, users.email as user_email, users.name as user_name
+        FROM bots
+        JOIN users ON users.id = bots.user_id
+        ORDER BY bots.created_at ASC
+    `),
     insertSlashCommand: database.prepare(`
         INSERT INTO slash_commands (
             id, bot_id, name, description, type, response_template, options_json, enabled, created_at
@@ -251,6 +272,31 @@ const statements = {
         WHERE id = @id AND bot_id = @bot_id
     `),
     deleteSlashCommand: database.prepare('DELETE FROM slash_commands WHERE id = ? AND bot_id = ?'),
+    insertWebhook: database.prepare(`
+        INSERT INTO webhook_urls (
+            id, bot_id, url, events_json, enabled, secret, created_at
+        ) VALUES (
+            @id, @bot_id, @url, @events_json, @enabled, @secret, @created_at
+        )
+    `),
+    listWebhooksByBot: database.prepare(`
+        SELECT * FROM webhook_urls
+        WHERE bot_id = ?
+        ORDER BY created_at ASC, id ASC
+    `),
+    getWebhookById: database.prepare(`
+        SELECT * FROM webhook_urls
+        WHERE id = ? AND bot_id = ?
+    `),
+    updateWebhook: database.prepare(`
+        UPDATE webhook_urls SET
+            url = @url,
+            events_json = @events_json,
+            enabled = @enabled,
+            secret = @secret
+        WHERE id = @id AND bot_id = @bot_id
+    `),
+    deleteWebhook: database.prepare('DELETE FROM webhook_urls WHERE id = ? AND bot_id = ?'),
     insertBotLog: database.prepare(`
         INSERT INTO bot_logs (bot_id, event_type, message, created_at)
         VALUES (@bot_id, @event_type, @message, @created_at)
@@ -368,6 +414,19 @@ function mapUserRow(row) {
     };
 }
 
+function mapUserSummaryRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        discordId: row.discord_id,
+        discordUsername: row.discord_username,
+        avatarUrl: row.avatar_url,
+        createdAt: new Date(row.created_at)
+    };
+}
+
 function mapBotRow(row) {
     if (!row) return null;
     return {
@@ -441,6 +500,19 @@ function mapSlashCommandRow(row) {
     };
 }
 
+function mapWebhookRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        botId: row.bot_id,
+        url: row.url,
+        events: safeJsonParse(row.events_json, []),
+        enabled: Boolean(row.enabled),
+        secret: row.secret || null,
+        createdAt: new Date(row.created_at)
+    };
+}
+
 function createUser({ id, email, passwordHash, name, discordId = null, discordUsername = null, avatarUrl = null }) {
     const createdAt = new Date().toISOString();
     statements.insertUser.run({
@@ -486,6 +558,21 @@ function updateDiscordProfile(userId, { discordId, discordUsername, avatarUrl, e
         email: email ?? null
     });
     return getUserById(userId);
+}
+
+function listUsers() {
+    const rows = statements.listUsers.all();
+    return rows.map(mapUserSummaryRow);
+}
+
+function getUserCount() {
+    const row = statements.countUsers.get();
+    return row?.total || 0;
+}
+
+function getBotCount() {
+    const row = statements.countBots.get();
+    return row?.total || 0;
 }
 
 function createFromDiscord({ id, email, passwordHash, name, discordId, discordUsername, avatarUrl }) {
@@ -542,6 +629,15 @@ function listBotsByUser(userId) {
 function listAllBots() {
     const rows = statements.listAllBots.all();
     return rows.map(mapBotRow);
+}
+
+function listAllBotsWithUser() {
+    const rows = statements.listAllBotsWithUser.all();
+    return rows.map((row) => ({
+        ...mapBotRow(row),
+        userEmail: row.user_email,
+        userName: row.user_name
+    }));
 }
 
 function getBotById(userId, botId) {
@@ -677,6 +773,64 @@ function updateSlashCommand(botId, commandId, updates) {
 
 function deleteSlashCommand(botId, commandId) {
     const result = statements.deleteSlashCommand.run(commandId, botId);
+    return result.changes > 0;
+}
+
+function createWebhook({ id, botId, url, events, enabled = true, secret = null, createdAt }) {
+    const stamped = createdAt ? toIso(createdAt) : new Date().toISOString();
+    const safeEvents = Array.isArray(events) ? events : [];
+    statements.insertWebhook.run({
+        id,
+        bot_id: botId,
+        url,
+        events_json: JSON.stringify(safeEvents),
+        enabled: enabled ? 1 : 0,
+        secret,
+        created_at: stamped
+    });
+
+    return {
+        id,
+        botId,
+        url,
+        events: safeEvents,
+        enabled: Boolean(enabled),
+        secret: secret || null,
+        createdAt: new Date(stamped)
+    };
+}
+
+function listWebhooks(botId) {
+    const rows = statements.listWebhooksByBot.all(botId);
+    return rows.map(mapWebhookRow);
+}
+
+function updateWebhook(botId, webhookId, updates) {
+    const existing = statements.getWebhookById.get(webhookId, botId);
+    if (!existing) return null;
+
+    const webhook = mapWebhookRow(existing);
+    const hasProp = (key) => Object.prototype.hasOwnProperty.call(updates, key);
+
+    if (hasProp('url')) webhook.url = updates.url;
+    if (hasProp('events')) webhook.events = Array.isArray(updates.events) ? updates.events : [];
+    if (hasProp('enabled')) webhook.enabled = Boolean(updates.enabled);
+    if (hasProp('secret')) webhook.secret = updates.secret || null;
+
+    statements.updateWebhook.run({
+        id: webhookId,
+        bot_id: botId,
+        url: webhook.url,
+        events_json: JSON.stringify(Array.isArray(webhook.events) ? webhook.events : []),
+        enabled: webhook.enabled ? 1 : 0,
+        secret: webhook.secret || null
+    });
+
+    return webhook;
+}
+
+function deleteWebhook(botId, webhookId) {
+    const result = statements.deleteWebhook.run(webhookId, botId);
     return result.changes > 0;
 }
 
@@ -951,10 +1105,14 @@ module.exports = {
     getUserById,
     findByDiscordId,
     updateDiscordProfile,
+    listUsers,
+    getUserCount,
+    getBotCount,
     createFromDiscord,
     createBot,
     listBotsByUser,
     listAllBots,
+    listAllBotsWithUser,
     getBotById,
     updateBot,
     deleteBot,
@@ -962,6 +1120,10 @@ module.exports = {
     listSlashCommands,
     updateSlashCommand,
     deleteSlashCommand,
+    createWebhook,
+    listWebhooks,
+    updateWebhook,
+    deleteWebhook,
     logBotEvent,
     getLatestBotStatusEvent,
     recordBotMessageReceived,

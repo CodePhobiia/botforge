@@ -17,12 +17,22 @@ const LIMITS = {
     prefixMax: 10,
     arrayItemsMax: 100,
     arrayItemMaxLen: 100,
-    apiKeyMax: 500
+    apiKeyMax: 500,
+    webhookUrlMax: 2048,
+    webhookSecretMax: 256
 };
 
 const ALLOWED_PROVIDERS = new Set(['openai', 'anthropic']);
 const ALLOWED_TRIGGER_MODES = new Set(['mention', 'all', 'prefix']);
 const ALLOWED_COLLAB_MODES = new Set(['off', 'reactive', 'proactive']);
+const ALLOWED_WEBHOOK_EVENTS = new Set([
+    'bot_started',
+    'bot_stopped',
+    'bot_error',
+    'message_received',
+    'automod_action',
+    'schedule_event'
+]);
 const { normalizeSchedule } = require('../engine/Scheduler');
 
 function stripHtml(input) {
@@ -110,6 +120,29 @@ function validateRateLimits(value) {
     return null;
 }
 
+function validateWebhookUrl(value) {
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > LIMITS.webhookUrlMax) return false;
+    try {
+        const parsed = new URL(trimmed);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+function validateWebhookEvents(value, { allowEmpty = true } = {}) {
+    if (!Array.isArray(value)) return 'events must be an array';
+    if (!allowEmpty && value.length === 0) return 'At least one event must be selected';
+    for (const event of value) {
+        if (typeof event !== 'string' || !ALLOWED_WEBHOOK_EVENTS.has(event)) {
+            return `Unsupported webhook event: ${event}`;
+        }
+    }
+    return null;
+}
+
 function validateBotIdParam(req, res, next) {
     if (req.params) {
         req.params = sanitizeObject(req.params);
@@ -117,6 +150,17 @@ function validateBotIdParam(req, res, next) {
     const { id } = req.params || {};
     if (!id || typeof id !== 'string' || !UUID_REGEX.test(id)) {
         return badRequest(res, 'Invalid bot id');
+    }
+    return next();
+}
+
+function validateWebhookIdParam(req, res, next) {
+    if (req.params) {
+        req.params = sanitizeObject(req.params);
+    }
+    const { whId } = req.params || {};
+    if (!whId || typeof whId !== 'string' || !UUID_REGEX.test(whId)) {
+        return badRequest(res, 'Invalid webhook id');
     }
     return next();
 }
@@ -341,6 +385,53 @@ function validateBotSchedule(req, res, next) {
     return next();
 }
 
+function validateCreateWebhook(req, res, next) {
+    req.body = sanitizeObject(req.body || {});
+    const { url, events, enabled, secret } = req.body;
+
+    if (!validateWebhookUrl(url)) {
+        return badRequest(res, 'Valid webhook URL required (http/https)');
+    }
+    if (events !== undefined) {
+        const error = validateWebhookEvents(events, { allowEmpty: false });
+        if (error) return badRequest(res, error);
+    }
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+        return badRequest(res, 'enabled must be a boolean');
+    }
+    if (secret !== undefined) {
+        if (typeof secret !== 'string' || secret.length > LIMITS.webhookSecretMax) {
+            return badRequest(res, `Secret must be at most ${LIMITS.webhookSecretMax} characters`);
+        }
+    }
+    return next();
+}
+
+function validateUpdateWebhook(req, res, next) {
+    req.body = sanitizeObject(req.body || {});
+    const { url, events, enabled, secret } = req.body;
+    const hasAny = url !== undefined || events !== undefined || enabled !== undefined || secret !== undefined;
+    if (!hasAny) {
+        return badRequest(res, 'No fields provided for update');
+    }
+    if (url !== undefined && !validateWebhookUrl(url)) {
+        return badRequest(res, 'Valid webhook URL required (http/https)');
+    }
+    if (events !== undefined) {
+        const error = validateWebhookEvents(events, { allowEmpty: true });
+        if (error) return badRequest(res, error);
+    }
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+        return badRequest(res, 'enabled must be a boolean');
+    }
+    if (secret !== undefined) {
+        if (typeof secret !== 'string' || secret.length > LIMITS.webhookSecretMax) {
+            return badRequest(res, `Secret must be at most ${LIMITS.webhookSecretMax} characters`);
+        }
+    }
+    return next();
+}
+
 module.exports = {
     validateRegister,
     validateLogin,
@@ -348,7 +439,10 @@ module.exports = {
     validateUpdateBot,
     validateUpdateBotConfig,
     validateBotIdParam,
+    validateWebhookIdParam,
     validateBotTools,
     validateBotSchedule,
+    validateCreateWebhook,
+    validateUpdateWebhook,
     sanitizeObject
 };
