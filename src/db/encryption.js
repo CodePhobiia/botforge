@@ -4,7 +4,8 @@ const path = require('path');
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
-const KEY_ENV = 'BOTFORGE_ENCRYPTION_KEY';
+const PRIMARY_KEY_ENV = 'ENCRYPTION_KEY';
+const FALLBACK_KEY_ENV = 'BOTFORGE_ENCRYPTION_KEY';
 const KEY_FILE = path.join(__dirname, '../../.botforge-key');
 
 let cachedKey = null;
@@ -29,8 +30,9 @@ function loadKeyFromFile() {
 function ensureKey() {
     if (cachedKey) return cachedKey;
 
-    if (process.env[KEY_ENV]) {
-        cachedKey = deriveKeyFromString(process.env[KEY_ENV]);
+    const envKey = process.env[PRIMARY_KEY_ENV] || process.env[FALLBACK_KEY_ENV];
+    if (envKey) {
+        cachedKey = deriveKeyFromString(envKey);
         return cachedKey;
     }
 

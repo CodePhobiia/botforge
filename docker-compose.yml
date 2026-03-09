@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  botforge:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    volumes:
+      - ./data:/app/data
+    restart: always
