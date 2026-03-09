@@ -11,6 +11,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@supabase/supabase-js": "*",
     "bcryptjs": "*",
+    "better-sqlite3": "^12.6.2",
     "cors": "*",
     "discord.js": "*",
     "dotenv": "*",
