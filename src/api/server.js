@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const compression = require('compression');
 const fs = require('fs');
 const http = require('http');
 const crypto = require('crypto');
@@ -108,9 +109,17 @@ app.disable('x-powered-by');
 app.use(requestIdMiddleware);
 app.use(securityHeaders);
 app.use(corsMiddleware());
+app.use(compression());
 app.use(jsonBodyParser);
 app.use(urlencodedBodyParser);
-app.use(express.static(path.join(__dirname, '../../public'), { index: false }));
+app.use(express.static(path.join(__dirname, '../../public'), {
+    index: false,
+    setHeaders: (res, filePath) => {
+        if (!filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+        }
+    }
+}));
 app.use('/api', apiRateLimiter);
 
 function maskBotForResponse(config, status = null) {
@@ -1253,6 +1262,21 @@ app.get('/dashboard', (req, res) => {
 
 app.get('/dashboard/{*path}', (req, res) => {
     res.sendFile(path.join(__dirname, '../../public/index.html'));
+});
+
+app.get('/404', (req, res) => {
+    res.status(404).sendFile(path.join(__dirname, '../../public/404.html'));
+});
+
+app.get('/500', (req, res) => {
+    res.status(500).sendFile(path.join(__dirname, '../../public/500.html'));
+});
+
+app.use((req, res) => {
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+    return res.status(404).sendFile(path.join(__dirname, '../../public/404.html'));
 });
 
 app.use(errorHandler);

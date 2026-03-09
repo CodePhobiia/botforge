@@ -2,6 +2,8 @@
  * Global error handler for API/server errors.
  */
 
+const path = require('path');
+
 function errorHandler(err, req, res, next) {
     if (res.headersSent) {
         return next(err);
@@ -31,6 +33,10 @@ function errorHandler(err, req, res, next) {
         console.error(`[${timestamp}] [${requestId}] ${logMessage}`);
     } else {
         console.error(`[${timestamp}] ${logMessage}`);
+    }
+
+    if (status >= 500 && !req.path.startsWith('/api') && req.accepts('html')) {
+        return res.status(status).sendFile(path.join(__dirname, '../../public/500.html'));
     }
 
     const payload = requestId ? { error: safeMessage, requestId } : { error: safeMessage };

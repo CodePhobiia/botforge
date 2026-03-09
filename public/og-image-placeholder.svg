@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E1B4B"/>
+      <stop offset="0.5" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="980" cy="140" r="140" fill="rgba(255,255,255,0.12)"/>
+  <circle cx="260" cy="520" r="180" fill="rgba(255,255,255,0.08)"/>
+  <text x="80" y="290" font-family="Space Grotesk, sans-serif" font-size="72" font-weight="700" fill="white">BotForge</text>
+  <text x="80" y="360" font-family="Space Grotesk, sans-serif" font-size="32" fill="white" opacity="0.8">Deploy Discord bots that feel alive</text>
+</svg>

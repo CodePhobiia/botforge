@@ -14,6 +14,7 @@
     "@supabase/supabase-js": "*",
     "bcryptjs": "*",
     "better-sqlite3": "^12.6.2",
+    "compression": "^1.8.1",
     "cors": "*",
     "croner": "^10.0.1",
     "discord.js": "*",

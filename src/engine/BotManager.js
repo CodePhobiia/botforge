@@ -877,6 +877,7 @@ class BotInstance {
             error: this.error,
             messageCount: this.messageCount,
             startedAt: this.startedAt,
+            lastResponseAt: this.health.lastResponseAt,
             guilds: this.guilds,
             model: this.model,
             aiProvider: this.aiProvider,
