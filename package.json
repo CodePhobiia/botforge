@@ -18,6 +18,7 @@
     "express": "*",
     "jsonwebtoken": "*",
     "openai": "*",
+    "socket.io": "^4.8.3",
     "uuid": "*"
   }
 }

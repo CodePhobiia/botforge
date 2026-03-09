@@ -66,7 +66,7 @@
         .bot-name{font-size:18px;font-weight:700}
         .bot-status{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px}
         .bot-status.running{background:rgba(16,185,129,0.15);color:var(--green)}
-        .bot-status.stopped{background:rgba(113,113,122,0.15);color:var(--gray)}
+        .bot-status.stopped{background:rgba(239,68,68,0.12);color:var(--red)}
         .bot-status.error{background:rgba(239,68,68,0.15);color:var(--red)}
         .bot-status.starting{background:rgba(245,158,11,0.15);color:var(--yellow)}
         .status-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
@@ -214,6 +214,20 @@
         .server-list{display:flex;flex-wrap:wrap;gap:6px}
         .server-pill{padding:4px 10px;border-radius:999px;background:#09090B;border:1px solid var(--border);font-size:11px;color:var(--light)}
         .empty-log{font-size:12px;color:var(--gray)}
+
+        .detail-analytics-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+        .analytics-range{display:flex;gap:6px}
+        .range-btn{background:#0B0B10;border:1px solid var(--border);color:var(--light);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+        .range-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(124,58,237,0.2)}
+        .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px}
+        .analytics-metric{background:#09090B;border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+        .analytics-label{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:0.7px}
+        .analytics-value{font-size:16px;font-weight:700;margin-top:6px}
+        .analytics-chart{background:#09090B;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+        .analytics-commands h5{font-size:12px;color:var(--gray);margin-bottom:8px}
+        .command-list{display:flex;flex-wrap:wrap;gap:6px}
+        .command-pill{padding:4px 8px;border-radius:999px;background:#09090B;border:1px solid var(--border);font-size:11px;color:var(--light)}
+        .command-empty{font-size:12px;color:var(--gray)}
 
         /* Settings */
         .settings-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
@@ -509,6 +523,41 @@
                 <div class="server-list" id="detailServers"></div>
             </div>
             <div class="detail-section full">
+                <div class="detail-analytics-header">
+                    <h4>Analytics</h4>
+                    <div class="analytics-range">
+                        <button class="range-btn active" data-range="24h" onclick="setAnalyticsRange('24h')">24h</button>
+                        <button class="range-btn" data-range="7d" onclick="setAnalyticsRange('7d')">7d</button>
+                        <button class="range-btn" data-range="30d" onclick="setAnalyticsRange('30d')">30d</button>
+                    </div>
+                </div>
+                <div class="analytics-grid">
+                    <div class="analytics-metric">
+                        <div class="analytics-label">Uptime</div>
+                        <div class="analytics-value" id="analyticsUptime">--</div>
+                    </div>
+                    <div class="analytics-metric">
+                        <div class="analytics-label">Error Rate</div>
+                        <div class="analytics-value" id="analyticsErrorRate">--</div>
+                    </div>
+                    <div class="analytics-metric">
+                        <div class="analytics-label">Messages Sent</div>
+                        <div class="analytics-value" id="analyticsMessagesSent">--</div>
+                    </div>
+                    <div class="analytics-metric">
+                        <div class="analytics-label">Messages Received</div>
+                        <div class="analytics-value" id="analyticsMessagesReceived">--</div>
+                    </div>
+                </div>
+                <div class="analytics-chart">
+                    <canvas id="messageChart" height="140"></canvas>
+                </div>
+                <div class="analytics-commands">
+                    <h5>Top Commands</h5>
+                    <div class="command-list" id="analyticsCommands"></div>
+                </div>
+            </div>
+            <div class="detail-section full">
                 <h4 id="detailLogsTitle">Conversation Log</h4>
                 <div class="log-list" id="detailLogs"></div>
             </div>
@@ -519,6 +568,8 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 const API = window.location.origin + '/api';
 let token = localStorage.getItem('bf_token');
@@ -526,6 +577,11 @@ let currentUser = null;
 let currentBots = [];
 let activePage = 'bots';
 let refreshInterval = null;
+let socket = null;
+let analyticsChart = null;
+let currentDetailBotId = null;
+let currentAnalyticsRange = '24h';
+const pendingStatusToasts = new Map();
 let templates = [];
 let templatesLoaded = false;
 let templateFilter = 'All';
@@ -638,6 +694,10 @@ function logout() {
     currentBots = [];
     localStorage.removeItem('bf_token');
     if (refreshInterval) clearInterval(refreshInterval);
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('dashboard').style.display = 'none';
     closeBotDetail();
@@ -764,6 +824,7 @@ async function showDashboard() {
     updateSettings(currentBots);
     loadTemplates();
     await refreshBots();
+    initSocket();
     refreshInterval = setInterval(refreshBots, 5000);
 }
 
@@ -778,14 +839,7 @@ async function refreshBots() {
     }
 }
 
-function renderBots(bots) {
-    const grid = document.getElementById('botsGrid');
-    const empty = document.getElementById('emptyState');
-    currentBots = bots;
-    maybeShowOnboarding(bots);
-    updateSettings(bots);
-    
-    // Stats
+function updateStatsFromBots(bots) {
     let totalServers = 0, totalMessages = 0, running = 0;
     bots.forEach(b => {
         if (b.status === 'running') running++;
@@ -796,6 +850,17 @@ function renderBots(bots) {
     document.getElementById('statRunning').textContent = running;
     document.getElementById('statServers').textContent = totalServers;
     document.getElementById('statMessages').textContent = totalMessages;
+}
+
+function renderBots(bots) {
+    const grid = document.getElementById('botsGrid');
+    const empty = document.getElementById('emptyState');
+    currentBots = bots;
+    maybeShowOnboarding(bots);
+    updateSettings(bots);
+    
+    // Stats
+    updateStatsFromBots(bots);
 
     if (bots.length === 0) {
         grid.innerHTML = '';
@@ -808,10 +873,10 @@ function renderBots(bots) {
     grid.innerHTML = bots.map(bot => {
         const status = bot.status || 'stopped';
         return `
-        <div class="bot-card" onclick="openBotDetail('${bot.id}')">
+        <div class="bot-card" id="bot-card-${bot.id}" data-bot-id="${bot.id}" onclick="openBotDetail('${bot.id}')">
             <div class="bot-header">
                 <div class="bot-name">${esc(bot.name)}</div>
-                <div class="bot-status ${status}">
+                <div class="bot-status ${status}" id="bot-status-${bot.id}">
                     <div class="status-dot"></div>
                     ${status}
                 </div>
@@ -831,7 +896,7 @@ function renderBots(bots) {
                 </div>
                 <div class="bot-meta-item">
                     <div class="meta-label">Messages</div>
-                    <div class="meta-value">${bot.messageCount || 0}</div>
+                    <div class="meta-value" id="bot-msg-${bot.id}">${bot.messageCount || 0}</div>
                 </div>
             </div>
             <div class="bot-personality">"${esc(bot.personality || 'No personality set')}"</div>
@@ -855,6 +920,125 @@ function renderBots(bots) {
     `}).join('');
 }
 
+function initSocket() {
+    if (!window.io || !token) return;
+    if (socket) socket.disconnect();
+    socket = io({ auth: { token } });
+    socket.on('connect_error', (err) => {
+        console.warn('Socket connection error:', err.message);
+    });
+    socket.on('bots_snapshot', (bots) => {
+        if (!Array.isArray(bots)) return;
+        bots.forEach(bot => updateBotState(bot.id, bot));
+        updateStatsFromBots(currentBots);
+    });
+    socket.on('bot_status', handleBotStatusEvent);
+    socket.on('bot_message', handleBotMessageEvent);
+    socket.on('bot_error', handleBotErrorEvent);
+}
+
+function updateBotState(botId, updates) {
+    const index = currentBots.findIndex(bot => bot.id === botId);
+    if (index === -1) return;
+    currentBots[index] = { ...currentBots[index], ...updates };
+    updateBotCard(currentBots[index]);
+    if (currentDetailBotId === botId) updateDetailStatus(currentBots[index]);
+}
+
+function updateBotCard(bot) {
+    const status = bot.status || 'stopped';
+    const statusEl = document.getElementById(`bot-status-${bot.id}`);
+    if (statusEl) {
+        statusEl.className = `bot-status ${status}`;
+        statusEl.innerHTML = `<div class="status-dot"></div>${status}`;
+    }
+    const msgEl = document.getElementById(`bot-msg-${bot.id}`);
+    if (msgEl) msgEl.textContent = bot.messageCount || 0;
+
+    const card = document.getElementById(`bot-card-${bot.id}`);
+    if (!card) return;
+    const actionsEl = card.querySelector('.bot-actions');
+    if (!actionsEl) return;
+    actionsEl.innerHTML = `
+        ${status === 'running' 
+            ? `<button class="stop-btn" onclick="event.stopPropagation(); stopBot('${bot.id}')">⏹ Stop</button>`
+            : `<button class="start-btn" onclick="event.stopPropagation(); startBot('${bot.id}')">▶ Start</button>`
+        }
+        <button class="edit-btn" onclick="event.stopPropagation(); editBot('${bot.id}')">✏️ Edit</button>
+        <button class="delete-btn" onclick="event.stopPropagation(); deleteBot('${bot.id}', '${esc(bot.name)}')">🗑️</button>
+    `;
+}
+
+function updateDetailStatus(bot) {
+    const metaEl = document.getElementById('detailMeta');
+    if (metaEl) {
+        metaEl.textContent = `${bot.status || 'stopped'} | ${bot.aiProvider || 'openai'} | ${bot.model || 'gpt-4o-mini'}`;
+    }
+    const uptimeMeta = document.getElementById('uptimeMeta');
+    if (uptimeMeta && uptimeMeta.dataset.source !== 'analytics') {
+        const uptime = generateUptimeBars(bot.id || '', bot.status);
+        uptimeMeta.textContent = `${uptime.percent}% uptime - ${bot.messageCount || 0} messages processed`;
+    }
+}
+
+function consumePendingToast(botId, status) {
+    const pending = pendingStatusToasts.get(botId);
+    if (!pending) return false;
+    if (pending.expires <= Date.now()) {
+        pendingStatusToasts.delete(botId);
+        return false;
+    }
+    if (pending.status === status) {
+        pendingStatusToasts.delete(botId);
+        return true;
+    }
+    return false;
+}
+
+function handleBotStatusEvent(payload) {
+    if (!payload || !payload.botId) return;
+    updateBotState(payload.botId, payload);
+    updateStatsFromBots(currentBots);
+    if (payload.previousStatus && payload.previousStatus !== payload.status) {
+        if (payload.status === 'error') return;
+        if (consumePendingToast(payload.botId, payload.status)) return;
+        const name = payload.name || 'Bot';
+        if (payload.status === 'running') {
+            showToast(`${name} started ✅`);
+        } else if (payload.status === 'stopped') {
+            showToast(`${name} stopped ⏹`, 'error');
+        } else if (payload.status === 'starting') {
+            showToast(`${name} is starting…`);
+        }
+    }
+}
+
+function handleBotMessageEvent(payload) {
+    if (!payload || payload.direction !== 'sent') return;
+    const count = payload.count || 1;
+    const bot = currentBots.find(b => b.id === payload.botId);
+    if (!bot) return;
+    bot.messageCount = (bot.messageCount || 0) + count;
+    updateBotCard(bot);
+    updateStatsFromBots(currentBots);
+    if (currentDetailBotId === bot.id) {
+        updateDetailStatus(bot);
+        const sentEl = document.getElementById('analyticsMessagesSent');
+        if (sentEl && sentEl.dataset.value) {
+            const nextValue = Number.parseInt(sentEl.dataset.value, 10) + count;
+            sentEl.dataset.value = nextValue.toString();
+            sentEl.textContent = nextValue.toString();
+        }
+    }
+}
+
+function handleBotErrorEvent(payload) {
+    if (!payload || !payload.botId) return;
+    if (consumePendingToast(payload.botId, 'error')) return;
+    const name = payload.name || 'Bot';
+    showToast(`${name} error: ${payload.message || 'Unknown issue'}`, 'error');
+}
+
 // ============ BOT ACTIONS ============
 
 async function startBot(id) {
@@ -865,6 +1049,7 @@ async function startBot(id) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
+        pendingStatusToasts.set(id, { status: 'running', expires: Date.now() + 4000 });
         showToast('Bot started! ✅');
         await refreshBots();
     } catch (err) {
@@ -880,6 +1065,7 @@ async function stopBot(id) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
+        pendingStatusToasts.set(id, { status: 'stopped', expires: Date.now() + 4000 });
         showToast('Bot stopped ⏹');
         await refreshBots();
     } catch (err) {
@@ -1192,9 +1378,17 @@ function openBotDetail(id) {
 
 function closeBotDetail() {
     document.getElementById('botDetail').classList.remove('show');
+    currentDetailBotId = null;
+    if (analyticsChart) {
+        analyticsChart.destroy();
+        analyticsChart = null;
+    }
 }
 
 function renderBotDetail(bot) {
+    currentDetailBotId = bot.id;
+    currentAnalyticsRange = '24h';
+    setAnalyticsRange(currentAnalyticsRange);
     const nameEl = document.getElementById('detailName');
     const metaEl = document.getElementById('detailMeta');
     nameEl.textContent = bot.name || 'Bot';
@@ -1203,7 +1397,9 @@ function renderBotDetail(bot) {
     const chart = document.getElementById('uptimeChart');
     const uptime = generateUptimeBars(bot.id || '', bot.status);
     chart.innerHTML = uptime.bars.map(height => `<div class="uptime-bar" style="height:${height}%"></div>`).join('');
-    document.getElementById('uptimeMeta').textContent = `${uptime.percent}% uptime - ${bot.messageCount || 0} messages processed`;
+    const uptimeMeta = document.getElementById('uptimeMeta');
+    uptimeMeta.textContent = `${uptime.percent}% uptime - ${bot.messageCount || 0} messages processed`;
+    uptimeMeta.dataset.source = 'sample';
 
     const servers = document.getElementById('detailServers');
     if (bot.guilds && bot.guilds.length) {
@@ -1211,6 +1407,17 @@ function renderBotDetail(bot) {
     } else {
         servers.innerHTML = '<span class="empty-log">No servers connected yet.</span>';
     }
+
+    const analyticsUptime = document.getElementById('analyticsUptime');
+    const analyticsErrorRate = document.getElementById('analyticsErrorRate');
+    const analyticsSent = document.getElementById('analyticsMessagesSent');
+    const analyticsReceived = document.getElementById('analyticsMessagesReceived');
+    const analyticsCommands = document.getElementById('analyticsCommands');
+    if (analyticsUptime) analyticsUptime.textContent = '--';
+    if (analyticsErrorRate) analyticsErrorRate.textContent = '--';
+    if (analyticsSent) analyticsSent.textContent = '--';
+    if (analyticsReceived) analyticsReceived.textContent = '--';
+    if (analyticsCommands) analyticsCommands.innerHTML = '<span class="command-empty">Loading…</span>';
 
     const logTitle = document.getElementById('detailLogsTitle');
     const logs = bot.recentMessages || [];
@@ -1258,6 +1465,136 @@ function hashCode(str) {
         hash |= 0;
     }
     return Math.abs(hash);
+}
+
+function setAnalyticsRange(range) {
+    currentAnalyticsRange = range;
+    document.querySelectorAll('.range-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.range === range);
+    });
+    if (!currentDetailBotId) return;
+    loadBotAnalytics(currentDetailBotId, range);
+}
+
+async function loadBotAnalytics(botId, range) {
+    const commandsEl = document.getElementById('analyticsCommands');
+    if (commandsEl) commandsEl.innerHTML = '<span class="command-empty">Loading…</span>';
+    try {
+        const res = await fetch(`${API}/bots/${botId}/analytics?range=${encodeURIComponent(range)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load analytics');
+        if (data.analytics) renderAnalytics(data.analytics);
+    } catch (err) {
+        console.error('Failed to load analytics:', err);
+        if (commandsEl) commandsEl.innerHTML = '<span class="command-empty">No analytics yet.</span>';
+    }
+}
+
+function renderAnalytics(analytics) {
+    if (!analytics) return;
+    const uptimeEl = document.getElementById('analyticsUptime');
+    const errorRateEl = document.getElementById('analyticsErrorRate');
+    const sentEl = document.getElementById('analyticsMessagesSent');
+    const receivedEl = document.getElementById('analyticsMessagesReceived');
+    const commandsEl = document.getElementById('analyticsCommands');
+
+    if (uptimeEl) uptimeEl.textContent = `${(analytics.totals.uptimePct || 0).toFixed(1)}%`;
+    if (errorRateEl) errorRateEl.textContent = `${(analytics.totals.errorRate || 0).toFixed(2)}%`;
+    if (sentEl) {
+        sentEl.textContent = analytics.totals.messagesSent || 0;
+        sentEl.dataset.value = (analytics.totals.messagesSent || 0).toString();
+    }
+    if (receivedEl) {
+        receivedEl.textContent = analytics.totals.messagesReceived || 0;
+        receivedEl.dataset.value = (analytics.totals.messagesReceived || 0).toString();
+    }
+
+    if (commandsEl) {
+        if (!analytics.topCommands || analytics.topCommands.length === 0) {
+            commandsEl.innerHTML = '<span class="command-empty">No commands tracked yet.</span>';
+        } else {
+            commandsEl.innerHTML = analytics.topCommands.map(item => `
+                <span class="command-pill">${esc(item.command)} · ${item.count}</span>
+            `).join('');
+        }
+    }
+
+    renderMessageChart(analytics);
+    if (analytics.range && analytics.range.hours === 24) {
+        updateUptimeChartFromAnalytics(analytics);
+    }
+}
+
+function renderMessageChart(analytics) {
+    const canvas = document.getElementById('messageChart');
+    if (!canvas || !window.Chart || !analytics.series) return;
+    const labels = analytics.series.labels.map(label => formatAnalyticsLabel(label, analytics.range?.hours || 24));
+    if (analyticsChart) analyticsChart.destroy();
+    analyticsChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Sent',
+                    data: analytics.series.messagesSent || [],
+                    backgroundColor: 'rgba(124,58,237,0.6)'
+                },
+                {
+                    label: 'Received',
+                    data: analytics.series.messagesReceived || [],
+                    backgroundColor: 'rgba(56,189,248,0.6)'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#A1A1AA' } }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#71717A', maxTicksLimit: 8 },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                y: {
+                    ticks: { color: '#71717A' },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function formatAnalyticsLabel(iso, hours) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    if (hours <= 24) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    if (hours <= 168) {
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function updateUptimeChartFromAnalytics(analytics) {
+    const chart = document.getElementById('uptimeChart');
+    const uptimeMeta = document.getElementById('uptimeMeta');
+    if (!chart || !analytics.series) return;
+    const bars = (analytics.series.uptimeMs || []).map(ms => {
+        const pct = Math.round((ms / (60 * 60 * 1000)) * 100);
+        return Math.min(100, Math.max(6, pct));
+    });
+    chart.innerHTML = bars.map(height => `<div class="uptime-bar" style="height:${height}%"></div>`).join('');
+    if (uptimeMeta) {
+        uptimeMeta.textContent = `${(analytics.totals.uptimePct || 0).toFixed(1)}% uptime - ${analytics.totals.messagesSent || 0} messages sent`;
+        uptimeMeta.dataset.source = 'analytics';
+    }
 }
 
 // ============ SETTINGS ============
