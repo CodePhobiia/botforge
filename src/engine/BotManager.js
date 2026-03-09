@@ -8,7 +8,8 @@ const EventEmitter = require('events');
 const { generateResponse } = require('./AIProvider');
 const { ToolSystem } = require('./ToolSystem');
 const { RateLimiter } = require('./RateLimiter');
-const { logConversation } = require('../db/database');
+const { AutoMod } = require('./AutoMod');
+const { logConversation, logModAction } = require('../db/database');
 
 const DEFAULT_MESSAGE_LOG_LIMIT = 100;
 const MAX_TOOL_ROUNDS = 2;
@@ -47,6 +48,8 @@ class BotInstance {
         this.manager = config.manager || null;
         this.toolSystem = config.toolSystem || null;
         this.rateLimiter = config.rateLimiter || null;
+        this.automodConfig = config.automodConfig || null;
+        this.automod = new AutoMod(this.automodConfig || {});
 
         this.collaborationMode = config.collaborationMode || 'off'; // off | reactive | proactive
         this.collaborationCooldownMs = config.collaborationCooldownMs || DEFAULT_COLLAB_COOLDOWN_MS;
@@ -146,6 +149,10 @@ class BotInstance {
             await this._handleMessage(message);
         });
 
+        this.client.on(Events.GuildMemberAdd, async (member) => {
+            await this._handleGuildMemberAdd(member);
+        });
+
         this.client.on(Events.Error, (error) => {
             console.error(`[BotManager] Bot "${this.name}" error:`, error.message);
             this.error = error.message;
@@ -188,6 +195,9 @@ class BotInstance {
 
         // Check channel filter
         if (this.channels.length > 0 && !this.channels.includes(message.channel.id)) return;
+
+        const automodHandled = await this._handleAutomod(message);
+        if (automodHandled) return;
 
         // Check trigger mode
         const shouldRespond = this._shouldRespond(message);
@@ -267,6 +277,91 @@ class BotInstance {
             if (err.message.includes('API key') || err.message.includes('auth')) {
                 await message.reply('⚠️ AI API error — check your API key configuration.').catch(() => {});
             }
+        }
+    }
+
+    async _handleAutomod(message) {
+        if (!this.automod) return false;
+        const violation = this.automod.checkMessage(message);
+        if (!violation) return false;
+
+        const actionResult = await this.automod.applyAction(message, violation);
+        const timestamp = new Date().toISOString();
+        const entry = {
+            botId: this.id,
+            userId: message.author?.id || null,
+            username: this._displayName(message),
+            guildId: message.guild?.id || null,
+            channelId: message.channel?.id || null,
+            violationType: violation.violationType,
+            actionTaken: actionResult.action,
+            messageContent: message.content || null,
+            timestamp
+        };
+        this._recordAutomodEvent(entry, {
+            actionApplied: actionResult.applied,
+            actionError: actionResult.error,
+            reason: violation.reason
+        });
+        return true;
+    }
+
+    async _handleGuildMemberAdd(member) {
+        if (!this.automod || !member) return;
+        const raidEvent = this.automod.handleMemberJoin(member);
+        if (!raidEvent || !raidEvent.triggered) return;
+
+        const timestamp = new Date().toISOString();
+        const entry = {
+            botId: this.id,
+            userId: member.id || null,
+            username: member.user?.username || null,
+            guildId: member.guild?.id || null,
+            channelId: null,
+            violationType: 'raid_detected',
+            actionTaken: 'lockdown',
+            messageContent: null,
+            timestamp
+        };
+
+        this._recordAutomodEvent(entry, {
+            raidDetected: true,
+            joinCount: raidEvent.count,
+            lockdownUntil: new Date(raidEvent.lockdownUntil).toISOString()
+        });
+    }
+
+    _recordAutomodEvent(entry, extra = {}) {
+        try {
+            logModAction({
+                botId: entry.botId,
+                userId: entry.userId,
+                username: entry.username,
+                guildId: entry.guildId,
+                channelId: entry.channelId,
+                violationType: entry.violationType,
+                actionTaken: entry.actionTaken,
+                messageContent: entry.messageContent,
+                timestamp: entry.timestamp
+            });
+        } catch (err) {
+            console.warn(`[BotManager] Failed to log automod action for "${this.name}":`, err.message);
+        }
+
+        if (this.manager && this.manager.emitBotEvent) {
+            this.manager.emitBotEvent('automod', {
+                botId: this.id,
+                userId: this.userId,
+                targetUserId: entry.userId,
+                targetUsername: entry.username,
+                guildId: entry.guildId,
+                channelId: entry.channelId,
+                violationType: entry.violationType,
+                actionTaken: entry.actionTaken,
+                messageContent: entry.messageContent,
+                timestamp: entry.timestamp,
+                ...extra
+            });
         }
     }
 
@@ -686,6 +781,15 @@ class BotInstance {
         return this.health.totalErrors / total;
     }
 
+    setAutomodConfig(config) {
+        this.automodConfig = config;
+        if (this.automod) {
+            this.automod.updateConfig(config || {});
+        } else {
+            this.automod = new AutoMod(config || {});
+        }
+    }
+
     _scheduleReconnect() {
         if (!this.shouldReconnect) return;
         if (this.reconnectTimer) return;
@@ -954,6 +1058,7 @@ class BotManager {
         if (Number.isFinite(config.historyLimit)) bot.historyLimit = config.historyLimit;
         if (config.collaborationMode) bot.collaborationMode = config.collaborationMode;
         if (Number.isFinite(config.messageLogLimit)) bot.messageLogLimit = config.messageLogLimit;
+        if (config.automodConfig !== undefined) bot.setAutomodConfig(config.automodConfig);
 
         if (wasRunning) await bot.start();
         return bot.getStatus();
@@ -969,6 +1074,13 @@ class BotManager {
         if (Array.isArray(config.tools)) bot.tools = config.tools;
         if (config.rateLimits !== undefined) bot.rateLimits = config.rateLimits;
 
+        return bot.getStatus();
+    }
+
+    updateBotAutomod(id, automodConfig) {
+        const bot = this.bots.get(id);
+        if (!bot) throw new Error(`Bot ${id} not found`);
+        bot.setAutomodConfig(automodConfig);
         return bot.getStatus();
     }
 

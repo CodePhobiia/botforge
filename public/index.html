@@ -249,6 +249,24 @@
         .flash-success{animation:configFlash 0.8s ease}
         @keyframes configFlash{0%{box-shadow:0 0 0 0 rgba(16,185,129,0.7);background:rgba(16,185,129,0.12)}100%{box-shadow:0 0 0 12px rgba(16,185,129,0);background:transparent}}
 
+        /* AutoMod */
+        .automod-grid{display:grid;grid-template-columns:1.15fr 0.85fr;gap:14px}
+        .automod-card{background:#09090B;border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:12px}
+        .automod-toggle{display:flex;align-items:center;justify-content:space-between;padding:10px;border:1px solid var(--border);border-radius:10px;background:#0B0B10}
+        .automod-toggle .toggle-title{font-size:12px;font-weight:700;color:var(--white)}
+        .automod-toggle .toggle-desc{font-size:10px;color:var(--gray);margin-top:2px}
+        .automod-log-list{display:grid;gap:8px;max-height:260px;overflow-y:auto}
+        .automod-log-item{border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:#0B0B10;font-size:11px;color:var(--light)}
+        .automod-log-item strong{color:var(--white)}
+        .automod-log-item .log-time{font-size:10px;color:var(--gray);margin-top:4px}
+        .automod-log-meta{font-size:10px;color:var(--gray)}
+        .switch{position:relative;display:inline-block;width:42px;height:22px}
+        .switch input{opacity:0;width:0;height:0}
+        .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#27272A;transition:0.2s;border-radius:999px}
+        .slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;top:3px;background:#FAFAFA;transition:0.2s;border-radius:50%}
+        .switch input:checked + .slider{background:rgba(16,185,129,0.6)}
+        .switch input:checked + .slider:before{transform:translateX(20px)}
+
         .detail-analytics-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
         .analytics-range{display:flex;gap:6px}
         .range-btn{background:#0B0B10;border:1px solid var(--border);color:var(--light);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
@@ -289,6 +307,7 @@
             .form-row{grid-template-columns:1fr}
             .config-row{grid-template-columns:1fr}
             .rate-grid{grid-template-columns:1fr}
+            .automod-grid{grid-template-columns:1fr}
         }
     </style>
 </head>
@@ -687,6 +706,98 @@
                     </div>
                 </div>
             </div>
+            <div class="detail-section full" id="automodSection">
+                <div class="detail-section-header">
+                    <h4>Auto-Mod</h4>
+                    <button class="secondary-btn" onclick="saveAutomodConfig()">Save Auto-Mod</button>
+                </div>
+                <div class="automod-grid">
+                    <div class="automod-card">
+                        <div class="automod-toggle">
+                            <div>
+                                <div class="toggle-title">Word Filter</div>
+                                <div class="toggle-desc">Block banned words and phrases</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="automodWordFilter">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="automod-toggle">
+                            <div>
+                                <div class="toggle-title">Spam Detection</div>
+                                <div class="toggle-desc">Repeat, caps, and mention checks</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="automodSpam">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="automod-toggle">
+                            <div>
+                                <div class="toggle-title">Link Blocking</div>
+                                <div class="toggle-desc">Block URLs outside the whitelist</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="automodLinks">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="automod-toggle">
+                            <div>
+                                <div class="toggle-title">Raid Protection</div>
+                                <div class="toggle-desc">Lock down during mass joins</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="automodRaid">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div>
+                            <div class="config-label">Banned Words (comma-separated)</div>
+                            <textarea id="automodBannedWords" placeholder="word1, phrase two"></textarea>
+                        </div>
+                        <div class="config-row">
+                            <div>
+                                <div class="config-label">Caps % Threshold</div>
+                                <input type="number" id="automodCapsPercent" min="30" max="100" placeholder="70">
+                            </div>
+                            <div>
+                                <div class="config-label">Mentions Limit</div>
+                                <input type="number" id="automodMentionsLimit" min="1" max="50" placeholder="5">
+                            </div>
+                        </div>
+                        <div class="config-row">
+                            <div>
+                                <div class="config-label">Spam Window (seconds)</div>
+                                <input type="number" id="automodSpamWindow" min="2" max="60" placeholder="6">
+                            </div>
+                            <div>
+                                <div class="config-label">Default Action</div>
+                                <select id="automodDefaultAction">
+                                    <option value="warn">Warn</option>
+                                    <option value="delete">Delete</option>
+                                    <option value="mute">Mute</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="ban">Ban</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="config-label">Link Whitelist (comma-separated)</div>
+                            <textarea id="automodLinkWhitelist" placeholder="example.com, trusted.site"></textarea>
+                        </div>
+                    </div>
+                    <div class="automod-card">
+                        <div class="detail-section-header">
+                            <h5>Recent Actions</h5>
+                            <button class="ghost-btn" onclick="loadAutomodLogs({ reset: true })">Refresh</button>
+                        </div>
+                        <div class="automod-log-list" id="automodLogList"></div>
+                        <div class="automod-log-meta" id="automodLogMeta"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -722,6 +833,22 @@ let conversationState = {
     query: '',
     hasMore: true,
     loading: false
+};
+let automodState = {
+    botId: null,
+    config: null,
+    logs: [],
+    limit: 25,
+    loading: false
+};
+
+const DEFAULT_AUTOMOD_CONFIG = {
+    defaultAction: 'warn',
+    muteDurationSeconds: 600,
+    wordFilter: { enabled: false, bannedWords: [] },
+    spam: { enabled: false, repeatWindowSeconds: 6, capsThresholdPercent: 70, mentionsLimit: 5, minCapsLength: 8 },
+    linkFilter: { enabled: false, whitelist: [] },
+    raidProtection: { enabled: false, joinThreshold: 10, joinWindowSeconds: 60, lockdownDurationSeconds: 300 }
 };
 
 const AVAILABLE_TOOLS = [
@@ -1078,6 +1205,7 @@ function initSocket() {
     socket.on('bot_status', handleBotStatusEvent);
     socket.on('bot_message', handleBotMessageEvent);
     socket.on('bot_error', handleBotErrorEvent);
+    socket.on('bot_automod', handleBotAutomodEvent);
 }
 
 function updateBotState(botId, updates) {
@@ -1538,6 +1666,7 @@ function closeBotDetail() {
     document.getElementById('botDetail').classList.remove('show');
     currentDetailBotId = null;
     activeDetailBotId = null;
+    resetAutomodState(null);
     if (analyticsChart) {
         analyticsChart.destroy();
         analyticsChart = null;
@@ -1582,6 +1711,9 @@ function renderBotDetail(bot) {
     resetConversationState(bot.id);
     loadConversationLogs({ reset: true });
     populateConfigPanel(bot);
+    resetAutomodState(bot.id);
+    loadAutomodConfig(bot.id);
+    loadAutomodLogs({ reset: true });
 }
 
 // ============ CONVERSATION LOGS ============
@@ -1881,6 +2013,231 @@ async function applyLiveConfig() {
     }
 }
 
+// ============ AUTO-MOD ============
+
+function normalizeAutomodConfig(config) {
+    const base = JSON.parse(JSON.stringify(DEFAULT_AUTOMOD_CONFIG));
+    if (!config || typeof config !== 'object') return base;
+    const merged = {
+        ...base,
+        ...config,
+        wordFilter: { ...base.wordFilter, ...(config.wordFilter || {}) },
+        spam: { ...base.spam, ...(config.spam || {}) },
+        linkFilter: { ...base.linkFilter, ...(config.linkFilter || {}) },
+        raidProtection: { ...base.raidProtection, ...(config.raidProtection || {}) }
+    };
+    merged.wordFilter.bannedWords = Array.isArray(merged.wordFilter.bannedWords) ? merged.wordFilter.bannedWords : [];
+    merged.linkFilter.whitelist = Array.isArray(merged.linkFilter.whitelist) ? merged.linkFilter.whitelist : [];
+    return merged;
+}
+
+function resetAutomodState(botId) {
+    automodState.botId = botId;
+    automodState.config = null;
+    automodState.logs = [];
+    automodState.loading = false;
+    populateAutomodPanel(DEFAULT_AUTOMOD_CONFIG);
+    renderAutomodLogs();
+}
+
+async function loadAutomodConfig(botId) {
+    if (!botId) return;
+    try {
+        const res = await fetch(`${API}/bots/${botId}/automod`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load automod config');
+        automodState.config = normalizeAutomodConfig(data.automod || {});
+        populateAutomodPanel(automodState.config);
+    } catch (err) {
+        console.error('Failed to load automod config:', err);
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+function populateAutomodPanel(config) {
+    const cfg = normalizeAutomodConfig(config);
+    const setChecked = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = Boolean(value);
+    };
+    const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value ?? '';
+    };
+
+    setChecked('automodWordFilter', cfg.wordFilter.enabled);
+    setChecked('automodSpam', cfg.spam.enabled);
+    setChecked('automodLinks', cfg.linkFilter.enabled);
+    setChecked('automodRaid', cfg.raidProtection.enabled);
+
+    setValue('automodBannedWords', cfg.wordFilter.bannedWords.join(', '));
+    setValue('automodLinkWhitelist', cfg.linkFilter.whitelist.join(', '));
+    setValue('automodCapsPercent', cfg.spam.capsThresholdPercent);
+    setValue('automodMentionsLimit', cfg.spam.mentionsLimit);
+    setValue('automodSpamWindow', cfg.spam.repeatWindowSeconds);
+    setValue('automodDefaultAction', cfg.defaultAction);
+}
+
+function parseCommaList(value) {
+    if (!value) return [];
+    return value.split(',').map(item => item.trim()).filter(Boolean);
+}
+
+function parseAutomodNumber(id, { min, max, fallback, label }) {
+    const el = document.getElementById(id);
+    if (!el) return fallback;
+    const raw = String(el.value || '').trim();
+    if (!raw) return fallback;
+    const value = Number.parseInt(raw, 10);
+    if (Number.isNaN(value) || value < min || value > max) {
+        showToast(`${label} must be between ${min} and ${max}`, 'error');
+        return null;
+    }
+    return value;
+}
+
+function buildAutomodPayload() {
+    const base = normalizeAutomodConfig(automodState.config || DEFAULT_AUTOMOD_CONFIG);
+    const defaultAction = document.getElementById('automodDefaultAction')?.value || base.defaultAction;
+    const caps = parseAutomodNumber('automodCapsPercent', { min: 30, max: 100, fallback: base.spam.capsThresholdPercent, label: 'Caps threshold' });
+    if (caps === null) return null;
+    const mentions = parseAutomodNumber('automodMentionsLimit', { min: 1, max: 50, fallback: base.spam.mentionsLimit, label: 'Mentions limit' });
+    if (mentions === null) return null;
+    const windowSeconds = parseAutomodNumber('automodSpamWindow', { min: 2, max: 60, fallback: base.spam.repeatWindowSeconds, label: 'Spam window' });
+    if (windowSeconds === null) return null;
+
+    const payload = {
+        ...base,
+        defaultAction,
+        wordFilter: {
+            ...base.wordFilter,
+            enabled: Boolean(document.getElementById('automodWordFilter')?.checked),
+            bannedWords: parseCommaList(document.getElementById('automodBannedWords')?.value || '')
+        },
+        spam: {
+            ...base.spam,
+            enabled: Boolean(document.getElementById('automodSpam')?.checked),
+            repeatWindowSeconds: windowSeconds,
+            capsThresholdPercent: caps,
+            mentionsLimit: mentions
+        },
+        linkFilter: {
+            ...base.linkFilter,
+            enabled: Boolean(document.getElementById('automodLinks')?.checked),
+            whitelist: parseCommaList(document.getElementById('automodLinkWhitelist')?.value || '')
+        },
+        raidProtection: {
+            ...base.raidProtection,
+            enabled: Boolean(document.getElementById('automodRaid')?.checked)
+        }
+    };
+
+    return payload;
+}
+
+async function saveAutomodConfig() {
+    if (!activeDetailBotId) return;
+    const payload = buildAutomodPayload();
+    if (!payload) return;
+
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/automod`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(payload)
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save automod config');
+        automodState.config = normalizeAutomodConfig(data.automod || payload);
+        showToast('Auto-Mod settings saved ✅');
+        populateAutomodPanel(automodState.config);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function loadAutomodLogs({ reset = false } = {}) {
+    if (!activeDetailBotId || automodState.loading) return;
+    if (reset) {
+        automodState.logs = [];
+    }
+
+    automodState.loading = true;
+    renderAutomodLogs();
+
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/automod/logs?limit=${automodState.limit}&offset=0`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); automodState.loading = false; renderAutomodLogs(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load automod logs');
+        automodState.logs = Array.isArray(data.logs) ? data.logs : [];
+    } catch (err) {
+        console.error('Failed to load automod logs:', err);
+        showToast('Error: ' + err.message, 'error');
+    }
+
+    automodState.loading = false;
+    renderAutomodLogs();
+}
+
+function renderAutomodLogs() {
+    const listEl = document.getElementById('automodLogList');
+    const metaEl = document.getElementById('automodLogMeta');
+    if (!listEl) return;
+
+    if (automodState.loading && automodState.logs.length === 0) {
+        listEl.innerHTML = '<div class="empty-log">Loading automod actions…</div>';
+    } else if (!automodState.logs.length) {
+        listEl.innerHTML = '<div class="empty-log">No automod actions yet.</div>';
+    } else {
+        listEl.innerHTML = automodState.logs.map((log) => {
+            const timeLabel = formatTimestamp(log.timestamp);
+            const userLabel = log.username || log.userId || 'Unknown user';
+            const actionLabel = log.actionTaken || 'action';
+            const violationLabel = log.violationType || 'violation';
+            const snippet = log.messageContent ? truncateText(log.messageContent, 120) : '';
+            return `
+                <div class="automod-log-item">
+                    <div><strong>${esc(actionLabel)}</strong> • ${esc(violationLabel)}</div>
+                    <div>${esc(userLabel)}${snippet ? ` — ${esc(snippet)}` : ''}</div>
+                    <div class="log-time">${esc(timeLabel)}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    if (metaEl) {
+        metaEl.textContent = automodState.logs.length ? `Showing latest ${automodState.logs.length} action(s)` : '';
+    }
+}
+
+function handleBotAutomodEvent(payload) {
+    if (!payload || payload.botId !== activeDetailBotId) return;
+    const entry = {
+        id: `live-${Date.now()}`,
+        botId: payload.botId,
+        userId: payload.targetUserId || null,
+        username: payload.targetUsername || null,
+        guildId: payload.guildId || null,
+        channelId: payload.channelId || null,
+        violationType: payload.violationType,
+        actionTaken: payload.actionTaken,
+        messageContent: payload.messageContent || null,
+        timestamp: payload.timestamp || new Date().toISOString()
+    };
+    automodState.logs.unshift(entry);
+    if (automodState.logs.length > automodState.limit) {
+        automodState.logs = automodState.logs.slice(0, automodState.limit);
+    }
+    renderAutomodLogs();
+}
+
 function generateUptimeBars(seed, status) {
     const bars = [];
     const base = status === 'running' ? 70 : status === 'starting' ? 55 : 35;
@@ -2083,6 +2440,12 @@ function esc(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
     return div.innerHTML;
+}
+
+function truncateText(text, maxLen) {
+    if (!text) return '';
+    if (text.length <= maxLen) return text;
+    return text.slice(0, maxLen - 1) + '…';
 }
 
 function decodeToken(tokenValue) {

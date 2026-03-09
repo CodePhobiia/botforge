@@ -89,16 +89,19 @@ describe('Engine: AutoMod', () => {
     const AutoMod = automodModule.AutoMod || automodModule.default || automodModule;
 
     test('word filter blocks banned content', () => {
-        const automod = new AutoMod({ bannedWords: ['banned'] });
-        const result = automod.checkMessage ? automod.checkMessage('this is banned') : automod.filter('this is banned');
-        expect(result.blocked || result.flagged || result.action).toBeTruthy();
+        const automod = new AutoMod({ wordFilter: { enabled: true, bannedWords: ['banned'] } });
+        const fakeMsg = { content: 'this is banned', author: { id: '1' }, member: null, guild: { id: 'g1' }, channel: { id: 'c1' } };
+        const result = automod.checkMessage(fakeMsg);
+        expect(result).not.toBeNull();
+        expect(result.violationType).toBe('word_filter');
     });
 
     test('spam detection flags repeated content', () => {
-        const automod = new AutoMod({ spamThreshold: 2 });
-        const first = automod.checkMessage ? automod.checkMessage('spammy') : automod.filter('spammy');
-        const second = automod.checkMessage ? automod.checkMessage('spammy') : automod.filter('spammy');
-        expect(first).toBeDefined();
-        expect(second.blocked || second.flagged || second.action).toBeTruthy();
+        const automod = new AutoMod({ spam: { enabled: true, repeatWindowSeconds: 10 } });
+        const fakeMsg = { content: 'spammy', author: { id: '1' }, member: null, guild: { id: 'g1' }, channel: { id: 'c1' } };
+        automod.checkMessage(fakeMsg); // first - no violation
+        const second = automod.checkMessage(fakeMsg); // repeat - should flag
+        expect(second).not.toBeNull();
+        expect(second.violationType).toBe('spam_repeat');
     });
 });

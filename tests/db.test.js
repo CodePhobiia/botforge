@@ -181,18 +181,18 @@ describe('Database', () => {
         const bot = buildBot(user.id);
         db.createBot(bot);
 
-        db.logAutomodEvent({
+        db.logModAction({
             botId: bot.id,
             userId: 'user-123',
             username: 'Spammer',
-            action: 'warn',
-            reason: 'spam',
+            violationType: 'spam_repeat',
+            actionTaken: 'warn',
             messageContent: 'buy now'
         });
 
-        const logs = db.getAutomodLogs(bot.id, 10, 0);
+        const logs = db.getModLogs(bot.id, 10, 0);
         expect(logs).toHaveLength(1);
-        expect(logs[0].action).toBe('warn');
+        expect(logs[0].actionTaken).toBe('warn');
     });
 
     test('encryption/decryption roundtrip', () => {

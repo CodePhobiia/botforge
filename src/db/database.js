@@ -32,6 +32,7 @@ function ensureBotColumns(database) {
     };
 
     addColumn('rate_limits_json', 'TEXT');
+    addColumn('automod_config_json', 'TEXT');
 }
 
 function initDatabase() {
@@ -74,6 +75,7 @@ function initDatabase() {
             channels_json TEXT NOT NULL,
             tools_json TEXT NOT NULL,
             rate_limits_json TEXT,
+            automod_config_json TEXT,
             max_tokens INTEGER NOT NULL,
             history_limit INTEGER NOT NULL,
             created_at TEXT NOT NULL,
@@ -123,10 +125,12 @@ function initDatabase() {
             bot_id TEXT NOT NULL,
             user_id TEXT,
             username TEXT,
-            action TEXT NOT NULL,
-            reason TEXT,
+            guild_id TEXT,
+            channel_id TEXT,
+            violation_type TEXT NOT NULL,
+            action_taken TEXT NOT NULL,
             message_content TEXT,
-            created_at TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
             FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
         );
 
@@ -138,6 +142,8 @@ function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_bot_analytics_bot_time ON bot_analytics(bot_id, timestamp);
         CREATE INDEX IF NOT EXISTS idx_bot_analytics_bot_event ON bot_analytics(bot_id, event_type);
         CREATE INDEX IF NOT EXISTS idx_automod_logs_bot_id ON automod_logs(bot_id);
+        CREATE INDEX IF NOT EXISTS idx_automod_logs_bot_time ON automod_logs(bot_id, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_automod_logs_violation ON automod_logs(bot_id, violation_type);
     `);
 
     ensureUserColumns(db);
@@ -168,12 +174,12 @@ const statements = {
         INSERT INTO bots (
             id, user_id, name, discord_token_encrypted, ai_provider,
             ai_api_key_encrypted, model, personality, trigger_mode, prefix,
-            channels_json, tools_json, rate_limits_json, max_tokens, history_limit,
+            channels_json, tools_json, rate_limits_json, automod_config_json, max_tokens, history_limit,
             created_at, updated_at
         ) VALUES (
             @id, @user_id, @name, @discord_token_encrypted, @ai_provider,
             @ai_api_key_encrypted, @model, @personality, @trigger_mode, @prefix,
-            @channels_json, @tools_json, @rate_limits_json, @max_tokens, @history_limit,
+            @channels_json, @tools_json, @rate_limits_json, @automod_config_json, @max_tokens, @history_limit,
             @created_at, @updated_at
         )
     `),
@@ -190,6 +196,7 @@ const statements = {
             channels_json = @channels_json,
             tools_json = @tools_json,
             rate_limits_json = @rate_limits_json,
+            automod_config_json = @automod_config_json,
             max_tokens = @max_tokens,
             history_limit = @history_limit,
             updated_at = @updated_at
@@ -218,11 +225,44 @@ const statements = {
             @message_content, @bot_response, @timestamp, @model_used, @tokens_used
         )
     `),
+    insertAutomodLog: database.prepare(`
+        INSERT INTO automod_logs (
+            bot_id, user_id, username, guild_id, channel_id,
+            violation_type, action_taken, message_content, timestamp
+        ) VALUES (
+            @bot_id, @user_id, @username, @guild_id, @channel_id,
+            @violation_type, @action_taken, @message_content, @timestamp
+        )
+    `),
     getConversationsByBot: database.prepare(`
         SELECT * FROM conversation_logs
         WHERE bot_id = ?
         ORDER BY timestamp DESC, id DESC
         LIMIT ? OFFSET ?
+    `),
+    getAutomodLogs: database.prepare(`
+        SELECT * FROM automod_logs
+        WHERE bot_id = ?
+        ORDER BY timestamp DESC, id DESC
+        LIMIT ? OFFSET ?
+    `),
+    getAutomodStatsTotal: database.prepare(`
+        SELECT COUNT(*) as total FROM automod_logs
+        WHERE bot_id = ?
+    `),
+    getAutomodStatsByViolation: database.prepare(`
+        SELECT violation_type, COUNT(*) as count
+        FROM automod_logs
+        WHERE bot_id = ?
+        GROUP BY violation_type
+        ORDER BY count DESC
+    `),
+    getAutomodStatsByAction: database.prepare(`
+        SELECT action_taken, COUNT(*) as count
+        FROM automod_logs
+        WHERE bot_id = ?
+        GROUP BY action_taken
+        ORDER BY count DESC
     `),
     searchConversationsByBot: database.prepare(`
         SELECT * FROM conversation_logs
@@ -252,19 +292,6 @@ const statements = {
         WHERE bot_id = ? AND timestamp >= ?
         ORDER BY timestamp ASC, id ASC
     `),
-    insertAutomodLog: database.prepare(`
-        INSERT INTO automod_logs (
-            bot_id, user_id, username, action, reason, message_content, created_at
-        ) VALUES (
-            @bot_id, @user_id, @username, @action, @reason, @message_content, @created_at
-        )
-    `),
-    getAutomodLogsByBot: database.prepare(`
-        SELECT * FROM automod_logs
-        WHERE bot_id = ?
-        ORDER BY created_at DESC, id DESC
-        LIMIT ? OFFSET ?
-    `)
 };
 
 function toIso(value) {
@@ -312,6 +339,7 @@ function mapBotRow(row) {
         channels: safeJsonParse(row.channels_json, []),
         tools: safeJsonParse(row.tools_json, []),
         rateLimits: safeJsonParse(row.rate_limits_json, null),
+        automodConfig: safeJsonParse(row.automod_config_json, null),
         maxTokens: row.max_tokens,
         historyLimit: row.history_limit,
         createdAt: new Date(row.created_at),
@@ -333,6 +361,22 @@ function mapConversationRow(row) {
         timestamp: row.timestamp,
         modelUsed: row.model_used,
         tokensUsed: row.tokens_used
+    };
+}
+
+function mapAutomodRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        botId: row.bot_id,
+        userId: row.user_id,
+        username: row.username,
+        guildId: row.guild_id,
+        channelId: row.channel_id,
+        violationType: row.violation_type,
+        actionTaken: row.action_taken,
+        messageContent: row.message_content,
+        timestamp: row.timestamp
     };
 }
 
@@ -414,6 +458,7 @@ function createBot(config) {
         channels_json: JSON.stringify(channelsValue),
         tools_json: JSON.stringify(toolsValue),
         rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
+        automod_config_json: config.automodConfig ? JSON.stringify(config.automodConfig) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         created_at: createdAt,
@@ -459,6 +504,7 @@ function updateBot(userId, botId, updates) {
     if (hasProp('channels')) config.channels = updates.channels;
     if (hasProp('tools')) config.tools = updates.tools;
     if (hasProp('rateLimits')) config.rateLimits = updates.rateLimits;
+    if (hasProp('automodConfig')) config.automodConfig = updates.automodConfig;
     if (hasProp('maxTokens')) config.maxTokens = updates.maxTokens;
     if (hasProp('historyLimit')) config.historyLimit = updates.historyLimit;
 
@@ -481,6 +527,7 @@ function updateBot(userId, botId, updates) {
         channels_json: JSON.stringify(channelsValue),
         tools_json: JSON.stringify(toolsValue),
         rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
+        automod_config_json: config.automodConfig ? JSON.stringify(config.automodConfig) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         updated_at: updatedAt.toISOString()
@@ -539,6 +586,32 @@ function logConversation({
         timestamp: stamped,
         model_used: modelUsed,
         tokens_used: Number.isFinite(tokensUsed) ? tokensUsed : null
+    });
+}
+
+function logModAction({
+    botId,
+    userId = null,
+    username = null,
+    guildId = null,
+    channelId = null,
+    violationType,
+    actionTaken,
+    messageContent = null,
+    timestamp = null
+}) {
+    if (!botId || !violationType || !actionTaken) return;
+    const stamped = timestamp ? toIso(timestamp) : new Date().toISOString();
+    statements.insertAutomodLog.run({
+        bot_id: botId,
+        user_id: userId,
+        username,
+        guild_id: guildId,
+        channel_id: channelId,
+        violation_type: violationType,
+        action_taken: actionTaken,
+        message_content: messageContent,
+        timestamp: stamped
     });
 }
 
@@ -705,39 +778,31 @@ function getBotAnalytics(botId, rangeHours = 24) {
     };
 }
 
-function logAutomodEvent({
-    botId,
-    userId = null,
-    username = null,
-    action,
-    reason = null,
-    messageContent = null,
-    createdAt = null
-}) {
-    if (!botId || !action) return;
-    statements.insertAutomodLog.run({
-        bot_id: botId,
-        user_id: userId,
-        username,
-        action,
-        reason,
-        message_content: messageContent,
-        created_at: createdAt ? toIso(createdAt) : new Date().toISOString()
-    });
+function getModLogs(botId, limit = 50, offset = 0) {
+    const rows = statements.getAutomodLogs.all(botId, limit, offset);
+    return rows.map(mapAutomodRow);
 }
 
-function getAutomodLogs(botId, limit = 50, offset = 0) {
-    const rows = statements.getAutomodLogsByBot.all(botId, limit, offset);
-    return rows.map((row) => ({
-        id: row.id,
-        botId: row.bot_id,
-        userId: row.user_id,
-        username: row.username,
-        action: row.action,
-        reason: row.reason,
-        messageContent: row.message_content,
-        createdAt: row.created_at
-    }));
+function getModStats(botId) {
+    const totalRow = statements.getAutomodStatsTotal.get(botId);
+    const byViolationRows = statements.getAutomodStatsByViolation.all(botId);
+    const byActionRows = statements.getAutomodStatsByAction.all(botId);
+
+    const byViolation = {};
+    const byAction = {};
+
+    for (const row of byViolationRows) {
+        byViolation[row.violation_type] = row.count;
+    }
+    for (const row of byActionRows) {
+        byAction[row.action_taken] = row.count;
+    }
+
+    return {
+        total: totalRow?.total || 0,
+        byViolation,
+        byAction
+    };
 }
 
 module.exports = {
@@ -762,9 +827,10 @@ module.exports = {
     recordBotUptime,
     getBotAnalytics,
     logConversation,
+    logModAction,
     getConversationsByBot,
     searchConversations,
     getAllConversationsByBot,
-    logAutomodEvent,
-    getAutomodLogs
+    getModLogs,
+    getModStats
 };
