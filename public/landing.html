@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotForge - Deploy AI Bots to Discord in One Click</title>
+    <meta name="description" content="Deploy AI-powered Discord bots in seconds. Bring your own API keys, configure personalities, and run multiple bots that work together.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#09090B;--card:rgba(24,24,27,0.75);--card-solid:#18181B;--border:rgba(255,255,255,0.08);--accent:#7C3AED;--accent-soft:rgba(124,58,237,0.2);--accent-dark:#5B21B6;--text:#FAFAFA;--muted:#A1A1AA;--subtle:#71717A;--glass:rgba(15,15,18,0.55)}
+        html{scroll-behavior:smooth}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+        a{text-decoration:none;color:inherit}
+        img{max-width:100%;display:block}
+        .mono{font-family:'JetBrains Mono',monospace}
+
+        .page{position:relative;overflow:hidden}
+        .bg-grid{position:absolute;inset:0;background-image:radial-gradient(rgba(124,58,237,0.15) 1px, transparent 1px);background-size:32px 32px;opacity:0.35;pointer-events:none}
+        .bg-glow{position:absolute;top:-200px;right:-200px;width:520px;height:520px;background:radial-gradient(circle, rgba(124,58,237,0.45), transparent 60%);filter:blur(20px);opacity:0.8}
+        .bg-glow.secondary{top:auto;bottom:-220px;left:-180px;background:radial-gradient(circle, rgba(91,33,182,0.35), transparent 65%)}
+
+        .container{max-width:1140px;margin:0 auto;padding:0 24px}
+
+        .nav{position:sticky;top:0;z-index:20;background:rgba(9,9,11,0.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+        .nav-inner{display:flex;align-items:center;justify-content:space-between;padding:18px 0}
+        .logo{font-size:20px;font-weight:900;letter-spacing:0.2px}
+        .logo span{color:var(--accent)}
+        .nav-links{display:flex;align-items:center;gap:20px;font-size:14px;color:var(--muted)}
+        .nav-links a:hover{color:var(--text)}
+        .nav-cta{display:flex;align-items:center;gap:12px}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:999px;font-weight:700;font-size:14px;border:1px solid transparent;transition:all 0.2s ease;background:var(--accent);color:white}
+        .btn:hover{background:var(--accent-dark);transform:translateY(-1px)}
+        .btn-outline{background:transparent;border-color:var(--border);color:var(--text)}
+        .btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+
+        .hero{padding:96px 0 70px;position:relative}
+        .hero-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:48px;align-items:center}
+        .eyebrow{display:inline-flex;align-items:center;gap:8px;background:var(--accent-soft);color:var(--accent);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+        .hero h1{font-size:52px;line-height:1.05;font-weight:900;margin:18px 0}
+        .hero p{font-size:18px;color:var(--muted);max-width:520px}
+        .hero-actions{display:flex;align-items:center;gap:16px;margin-top:32px;flex-wrap:wrap}
+        .hero-card{background:var(--glass);border:1px solid var(--border);border-radius:20px;padding:24px;backdrop-filter:blur(18px);box-shadow:0 18px 60px rgba(0,0,0,0.35)}
+        .hero-card .label{font-size:12px;color:var(--subtle);text-transform:uppercase;letter-spacing:1px;font-weight:700}
+        .hero-card h3{font-size:18px;font-weight:700;margin:10px 0 6px}
+        .hero-card p{font-size:14px;color:var(--muted)}
+        .hero-list{margin-top:18px;display:grid;gap:12px}
+        .hero-list-item{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted)}
+        .hero-list-item span{color:var(--accent);font-weight:700}
+
+        section{padding:70px 0}
+        .section-title{font-size:28px;font-weight:800;margin-bottom:12px}
+        .section-subtitle{color:var(--muted);font-size:16px;max-width:640px}
+        .section-head{margin-bottom:36px}
+
+        .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+        .step-card{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:24px;backdrop-filter:blur(18px)}
+        .step-card .step{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:1px}
+        .step-card h3{margin:12px 0 8px;font-size:18px}
+        .step-card p{color:var(--muted);font-size:14px}
+
+        .features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+        .feature-card{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:22px;min-height:150px;backdrop-filter:blur(18px);position:relative;overflow:hidden}
+        .feature-card::after{content:"";position:absolute;inset:auto -40% 70% 50%;width:180px;height:180px;background:radial-gradient(circle, rgba(124,58,237,0.25), transparent 70%);opacity:0.7}
+        .feature-card h4{font-size:16px;margin-bottom:8px}
+        .feature-card p{color:var(--muted);font-size:14px}
+
+        .pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+        .price-card{background:var(--glass);border:1px solid var(--border);border-radius:18px;padding:26px;backdrop-filter:blur(18px);display:flex;flex-direction:column;gap:18px}
+        .price-card.popular{border-color:rgba(124,58,237,0.6);box-shadow:0 18px 40px rgba(124,58,237,0.15)}
+        .price-tag{font-size:14px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:1px}
+        .price-amount{font-size:38px;font-weight:800}
+        .price-amount span{font-size:14px;color:var(--muted);font-weight:500}
+        .price-list{display:grid;gap:10px;color:var(--muted);font-size:14px}
+        .price-list strong{color:var(--text)}
+
+        .faq-grid{display:grid;gap:12px}
+        details{background:var(--glass);border:1px solid var(--border);border-radius:14px;padding:18px 20px}
+        summary{cursor:pointer;font-weight:600;font-size:15px}
+        details p{margin-top:10px;color:var(--muted);font-size:14px}
+
+        .cta-block{background:linear-gradient(135deg, rgba(124,58,237,0.2), rgba(91,33,182,0.05));border:1px solid rgba(124,58,237,0.35);border-radius:22px;padding:36px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+        .cta-block h3{font-size:26px;font-weight:800}
+        .cta-block p{color:var(--muted)}
+
+        footer{padding:40px 0;border-top:1px solid var(--border)}
+        .footer-inner{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}
+        .footer-links{display:flex;gap:18px;color:var(--muted);font-size:14px}
+        .footer-links a:hover{color:var(--text)}
+        .footnote{color:var(--subtle);font-size:12px}
+
+        .reveal{opacity:1;transform:none}
+        @media (prefers-reduced-motion: no-preference){
+            @supports (animation-timeline: view()){
+                .reveal{opacity:0;transform:translateY(24px);animation:reveal 1s ease forwards;animation-timeline:view();animation-range:entry 0% cover 30%}
+            }
+        }
+        @keyframes reveal{to{opacity:1;transform:translateY(0)}}
+
+        @media(max-width:960px){
+            .hero-grid{grid-template-columns:1fr}
+            .features,.pricing-grid,.steps{grid-template-columns:1fr 1fr}
+            .nav-links{display:none}
+        }
+        @media(max-width:720px){
+            .features,.pricing-grid,.steps{grid-template-columns:1fr}
+            .hero h1{font-size:40px}
+            .hero{padding-top:70px}
+            .cta-block{padding:28px}
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="bg-grid"></div>
+        <div class="bg-glow"></div>
+        <div class="bg-glow secondary"></div>
+
+        <nav class="nav">
+            <div class="container nav-inner">
+                <div class="logo">Bot<span>Forge</span></div>
+                <div class="nav-links">
+                    <a href="#how">How it works</a>
+                    <a href="#features">Features</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#faq">FAQ</a>
+                </div>
+                <div class="nav-cta">
+                    <a class="btn btn-outline" href="/dashboard">Sign in</a>
+                    <a class="btn" href="/dashboard">Get Started</a>
+                </div>
+            </div>
+        </nav>
+
+        <main>
+            <section class="hero">
+                <div class="container hero-grid">
+                    <div class="reveal">
+                        <span class="eyebrow">BotForge Platform</span>
+                        <h1>Deploy AI Bots to Discord in One Click</h1>
+                        <p>Launch production-ready Discord bots with your own AI keys in minutes. Configure personalities, manage multiple bots, and monitor everything from a real-time dashboard.</p>
+                        <div class="hero-actions">
+                            <a class="btn" href="/dashboard">Get Started</a>
+                            <a class="btn btn-outline" href="#pricing">View Pricing</a>
+                        </div>
+                        <div class="hero-list">
+                            <div class="hero-list-item"><span>01</span>Bring your own Discord token + AI API key.</div>
+                            <div class="hero-list-item"><span>02</span>Ship multiple bots with shared context and roles.</div>
+                            <div class="hero-list-item"><span>03</span>Track conversations and uptime in real time.</div>
+                        </div>
+                    </div>
+                    <div class="hero-card reveal">
+                        <div class="label mono">Live Preview</div>
+                        <h3>Control center for every bot.</h3>
+                        <p>Create a command bot, support bot, and a community moderator in one workspace.</p>
+                        <div class="hero-list">
+                            <div class="hero-list-item"><span>*</span>Multi-bot orchestration</div>
+                            <div class="hero-list-item"><span>*</span>Any AI model, no lock-in</div>
+                            <div class="hero-list-item"><span>*</span>Conversation history and analytics</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="how">
+                <div class="container">
+                    <div class="section-head reveal">
+                        <div class="section-title">How it works</div>
+                        <div class="section-subtitle">Go from idea to deployed Discord bot in three simple steps.</div>
+                    </div>
+                    <div class="steps">
+                        <div class="step-card reveal">
+                            <div class="step">Step 1</div>
+                            <h3>Create a Discord bot</h3>
+                            <p>Use the Discord Developer Portal to create your bot and generate a token.</p>
+                        </div>
+                        <div class="step-card reveal">
+                            <div class="step">Step 2</div>
+                            <h3>Configure on BotForge</h3>
+                            <p>Add your token, connect any AI provider, and define your bot personality.</p>
+                        </div>
+                        <div class="step-card reveal">
+                            <div class="step">Step 3</div>
+                            <h3>Deploy instantly</h3>
+                            <p>Launch your bot with one click and monitor it from the live dashboard.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="features">
+                <div class="container">
+                    <div class="section-head reveal">
+                        <div class="section-title">Features built for teams</div>
+                        <div class="section-subtitle">Everything you need to launch, scale, and collaborate on AI bots in Discord.</div>
+                    </div>
+                    <div class="features">
+                        <div class="feature-card reveal">
+                            <h4>Multi-bot support</h4>
+                            <p>Run multiple bots across different servers from one dashboard.</p>
+                        </div>
+                        <div class="feature-card reveal">
+                            <h4>Any AI model</h4>
+                            <p>Use OpenAI, Anthropic, or any model with your own API keys.</p>
+                        </div>
+                        <div class="feature-card reveal">
+                            <h4>BYOK security</h4>
+                            <p>Bring your own keys and keep control of your usage and billing.</p>
+                        </div>
+                        <div class="feature-card reveal">
+                            <h4>Real-time dashboard</h4>
+                            <p>Watch uptime, message counts, and server activity in real time.</p>
+                        </div>
+                        <div class="feature-card reveal">
+                            <h4>Conversation history</h4>
+                            <p>Review recent bot messages for quality and safety checks.</p>
+                        </div>
+                        <div class="feature-card reveal">
+                            <h4>Bot collaboration</h4>
+                            <p>Coordinate bots with distinct roles across channels and workflows.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="pricing">
+                <div class="container">
+                    <div class="section-head reveal">
+                        <div class="section-title">Pricing that scales with you</div>
+                        <div class="section-subtitle">Start free, upgrade when you need more capacity and collaboration.</div>
+                    </div>
+                    <div class="pricing-grid">
+                        <div class="price-card reveal">
+                            <div>
+                                <div class="price-tag">Free</div>
+                                <div class="price-amount">$0 <span>/ month</span></div>
+                                <div class="price-list">
+                                    <div><strong>1 bot</strong> deployed</div>
+                                    <div><strong>50 msgs/day</strong></div>
+                                    <div>Community support</div>
+                                </div>
+                            </div>
+                            <a class="btn btn-outline" href="/dashboard">Get Started</a>
+                        </div>
+                        <div class="price-card popular reveal">
+                            <div>
+                                <div class="price-tag">Pro</div>
+                                <div class="price-amount">$9 <span>/ month</span></div>
+                                <div class="price-list">
+                                    <div><strong>5 bots</strong> deployed</div>
+                                    <div><strong>Unlimited messages</strong></div>
+                                    <div>Shared team dashboard</div>
+                                </div>
+                            </div>
+                            <a class="btn" href="/dashboard">Start Pro</a>
+                        </div>
+                        <div class="price-card reveal">
+                            <div>
+                                <div class="price-tag">Team</div>
+                                <div class="price-amount">$19 <span>/ month</span></div>
+                                <div class="price-list">
+                                    <div><strong>Unlimited bots</strong></div>
+                                    <div><strong>Priority support</strong></div>
+                                    <div>Advanced collaboration</div>
+                                </div>
+                            </div>
+                            <a class="btn btn-outline" href="/dashboard">Contact Sales</a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="faq">
+                <div class="container">
+                    <div class="section-head reveal">
+                        <div class="section-title">FAQ</div>
+                        <div class="section-subtitle">Answers to the most common BotForge questions.</div>
+                    </div>
+                    <div class="faq-grid">
+                        <details class="reveal">
+                            <summary>Do you store my Discord token or API key?</summary>
+                            <p>Keys are encrypted in transit and only used to run your bot. You can rotate or revoke them at any time.</p>
+                        </details>
+                        <details class="reveal">
+                            <summary>Can I use multiple AI providers?</summary>
+                            <p>Yes. Each bot can be configured with its own provider and model.</p>
+                        </details>
+                        <details class="reveal">
+                            <summary>What happens if my bot goes offline?</summary>
+                            <p>The dashboard shows uptime indicators so you can restart quickly. Our team plan includes priority support.</p>
+                        </details>
+                        <details class="reveal">
+                            <summary>Is there a free plan?</summary>
+                            <p>Yes, you can run one bot with up to 50 messages per day for free.</p>
+                        </details>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div class="container">
+                    <div class="cta-block reveal">
+                        <div>
+                            <h3>Ready to deploy your first AI bot?</h3>
+                            <p>Launch in minutes with your own tokens and full control.</p>
+                        </div>
+                        <a class="btn" href="/dashboard">Get Started</a>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <div class="container footer-inner">
+                <div class="logo">Bot<span>Forge</span></div>
+                <div class="footer-links">
+                    <a href="#features">Features</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#faq">FAQ</a>
+                    <a href="/dashboard">Dashboard</a>
+                </div>
+                <div class="footnote">Built for Discord communities - BYOK ready</div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

@@ -31,7 +31,7 @@ const botManager = new BotManager();
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../../public')));
+app.use(express.static(path.join(__dirname, '../../public'), { index: false }));
 
 function maskBotForResponse(config, status = null) {
     const { discordToken, aiApiKey, updatedAt, ...rest } = config;
@@ -312,8 +312,16 @@ async function bootstrapBots() {
     }
 }
 
-// SPA fallback
-app.get('/{*path}', (req, res) => {
+// Landing + dashboard routes
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../public/landing.html'));
+});
+
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../public/index.html'));
+});
+
+app.get('/dashboard/*', (req, res) => {
     res.sendFile(path.join(__dirname, '../../public/index.html'));
 });
 

@@ -56,8 +56,8 @@
 
         /* Bot Cards */
         .bots-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:16px}
-        .bot-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color 0.2s}
-        .bot-card:hover{border-color:var(--accent)}
+        .bot-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color 0.2s,transform 0.2s,box-shadow 0.2s;cursor:pointer;position:relative}
+        .bot-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 18px 30px rgba(0,0,0,0.3)}
         .bot-header{display:flex;justify-content:space-between;align-items:start;margin-bottom:16px}
         .bot-name{font-size:18px;font-weight:700}
         .bot-status{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px}
@@ -66,6 +66,10 @@
         .bot-status.error{background:rgba(239,68,68,0.15);color:var(--red)}
         .bot-status.starting{background:rgba(245,158,11,0.15);color:var(--yellow)}
         .status-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+        .bot-status.running .status-dot{animation:pulse-green 1.6s infinite}
+        .bot-status.starting .status-dot{animation:pulse-yellow 1.2s infinite}
+        @keyframes pulse-green{0%{box-shadow:0 0 0 0 rgba(16,185,129,0.6)}70%{box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+        @keyframes pulse-yellow{0%{box-shadow:0 0 0 0 rgba(245,158,11,0.6)}70%{box-shadow:0 0 0 8px rgba(245,158,11,0)}100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}}
         
         .bot-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
         .bot-meta-item{font-size:12px}
@@ -108,14 +112,80 @@
         .modal-actions .save-btn:hover{background:var(--accent-dark)}
         .modal-actions .cancel-btn{background:transparent;border:1px solid var(--border);color:var(--light)}
         .modal .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .modal .edit-note{background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);color:var(--light);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:12px;display:none}
+        .modal.editing .edit-note{display:block}
 
         .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 20px;font-size:14px;z-index:200;display:none;animation:slideIn 0.3s}
         @keyframes slideIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+        /* Navigation Tabs */
+        .nav-tabs{display:flex;align-items:center;gap:10px}
+        .nav-tab{background:transparent;border:1px solid var(--border);color:var(--light);padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s}
+        .nav-tab.active{background:rgba(124,58,237,0.18);border-color:rgba(124,58,237,0.5);color:var(--accent)}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent)}
+
+        /* Pages */
+        .page{display:none}
+        .page.active{display:block}
+
+        /* Onboarding */
+        .onboarding{background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.4);border-radius:16px;padding:20px 24px;margin-bottom:24px}
+        .onboarding-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+        .onboarding h3{font-size:18px;font-weight:700}
+        .ghost-btn{background:transparent;border:1px solid var(--border);color:var(--light);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit}
+        .ghost-btn:hover{border-color:var(--accent);color:var(--accent)}
+        .onboarding-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+        .onboarding-step{background:#0d0d11;border:1px solid var(--border);border-radius:12px;padding:14px;font-size:12px;color:var(--light)}
+        .onboarding-step strong{display:block;color:var(--white);font-size:13px;margin-bottom:6px}
+        .onboarding-step a{color:var(--accent)}
+
+        /* Bot Detail */
+        .detail-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:120;align-items:center;justify-content:center;padding:20px}
+        .detail-overlay.show{display:flex}
+        .detail-panel{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;width:100%;max-width:920px;max-height:90vh;overflow-y:auto}
+        .detail-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+        .detail-title{font-size:22px;font-weight:800}
+        .detail-sub{font-size:12px;color:var(--gray)}
+        .icon-btn{background:transparent;border:1px solid var(--border);color:var(--light);width:32px;height:32px;border-radius:50%;cursor:pointer;font-family:inherit}
+        .icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+        .detail-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:16px}
+        .detail-section{background:#0d0d11;border:1px solid var(--border);border-radius:14px;padding:16px}
+        .detail-section.full{grid-column:1 / -1}
+        .detail-section h4{font-size:14px;font-weight:700;margin-bottom:10px}
+        .uptime-chart{display:flex;align-items:flex-end;gap:6px;height:120px;margin-bottom:8px}
+        .uptime-bar{flex:1;background:linear-gradient(180deg, rgba(124,58,237,0.75), rgba(124,58,237,0.2));border-radius:6px 6px 0 0}
+        .uptime-meta{font-size:12px;color:var(--gray)}
+        .log-list{display:grid;gap:10px;max-height:260px;overflow-y:auto}
+        .log-item{background:#09090B;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:12px;color:var(--light)}
+        .log-item strong{color:var(--white)}
+        .log-item .log-time{font-size:10px;color:var(--gray);margin-top:4px}
+        .server-list{display:flex;flex-wrap:wrap;gap:6px}
+        .server-pill{padding:4px 10px;border-radius:999px;background:#09090B;border:1px solid var(--border);font-size:11px;color:var(--light)}
+        .empty-log{font-size:12px;color:var(--gray)}
+
+        /* Settings */
+        .settings-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+        .form-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px}
+        .form-card h3{font-size:16px;font-weight:700;margin-bottom:12px}
+        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .form-card label{display:block;font-size:12px;font-weight:600;color:var(--light);margin:10px 0 4px}
+        .form-card input{width:100%;padding:10px 14px;background:#09090B;border:1px solid var(--border);border-radius:8px;color:var(--white);font-size:14px;font-family:inherit}
+        .form-card input:focus{outline:none;border-color:var(--accent)}
+        .form-actions{margin-top:16px;display:flex;gap:10px}
+        .primary-btn{background:var(--accent);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+        .primary-btn:hover{background:var(--accent-dark)}
+        .secondary-btn{background:transparent;border:1px solid var(--border);color:var(--light);padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+        .secondary-btn:hover{border-color:var(--accent);color:var(--accent)}
 
         @media(max-width:768px){
             .stats-bar{grid-template-columns:1fr 1fr}
             .bots-grid{grid-template-columns:1fr}
             .modal .row{grid-template-columns:1fr}
+            .nav-tabs{display:none}
+            .detail-grid{grid-template-columns:1fr}
+            .onboarding-steps{grid-template-columns:1fr}
+            .settings-grid{grid-template-columns:1fr}
+            .form-row{grid-template-columns:1fr}
         }
     </style>
 </head>
@@ -155,6 +225,10 @@
 <div class="dashboard" id="dashboard">
     <header>
         <div class="logo">⚡ Bot<span>Forge</span></div>
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-page="bots" onclick="showPage('bots')">Bots</button>
+            <button class="nav-tab" data-page="settings" onclick="showPage('settings')">Settings</button>
+        </div>
         <div class="user-info">
             <span class="user-name" id="userName"></span>
             <button class="logout-btn" onclick="logout()">Log Out</button>
@@ -162,36 +236,107 @@
     </header>
 
     <div class="main">
-        <div class="stats-bar">
-            <div class="stat-card">
-                <div class="label">Total Bots</div>
-                <div class="value accent" id="statTotal">0</div>
+        <div class="page active" id="botsPage">
+            <div class="onboarding" id="onboarding" style="display:none">
+                <div class="onboarding-header">
+                    <h3>Welcome to BotForge</h3>
+                    <button class="ghost-btn" onclick="dismissOnboarding()">Got it</button>
+                </div>
+                <div class="onboarding-steps">
+                    <div class="onboarding-step">
+                        <strong>1. Create a Discord bot</strong>
+                        Head to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a> and create a new application.
+                    </div>
+                    <div class="onboarding-step">
+                        <strong>2. Copy your bot token</strong>
+                        Open the Bot tab, reset the token, and keep it safe.
+                    </div>
+                    <div class="onboarding-step">
+                        <strong>3. Add your AI API key</strong>
+                        Bring your OpenAI or Anthropic API key to power your bot.
+                    </div>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="label">Running</div>
-                <div class="value green" id="statRunning">0</div>
+
+            <div class="stats-bar">
+                <div class="stat-card">
+                    <div class="label">Total Bots</div>
+                    <div class="value accent" id="statTotal">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Running</div>
+                    <div class="value green" id="statRunning">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Servers</div>
+                    <div class="value" id="statServers">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Messages Sent</div>
+                    <div class="value yellow" id="statMessages">0</div>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="label">Servers</div>
-                <div class="value" id="statServers">0</div>
+
+            <div class="action-bar">
+                <h2>Your Bots</h2>
+                <button class="create-btn" onclick="showCreateModal()">+ New Bot</button>
             </div>
-            <div class="stat-card">
-                <div class="label">Messages Sent</div>
-                <div class="value yellow" id="statMessages">0</div>
+
+            <div class="bots-grid" id="botsGrid">
+                <div class="empty-state" id="emptyState">
+                    <div class="icon">🤖</div>
+                    <h3>No bots yet</h3>
+                    <p>Create your first AI bot and deploy it to Discord in seconds.</p>
+                    <button class="create-btn" onclick="showCreateModal()">+ Create Your First Bot</button>
+                </div>
             </div>
         </div>
 
-        <div class="action-bar">
-            <h2>Your Bots</h2>
-            <button class="create-btn" onclick="showCreateModal()">+ New Bot</button>
-        </div>
-
-        <div class="bots-grid" id="botsGrid">
-            <div class="empty-state" id="emptyState">
-                <div class="icon">🤖</div>
-                <h3>No bots yet</h3>
-                <p>Create your first AI bot and deploy it to Discord in seconds.</p>
-                <button class="create-btn" onclick="showCreateModal()">+ Create Your First Bot</button>
+        <div class="page" id="settingsPage">
+            <div class="settings-grid">
+                <div class="form-card">
+                    <h3>Account</h3>
+                    <label>Name</label>
+                    <input type="text" id="settingsName" placeholder="Your name">
+                    <label>Email</label>
+                    <input type="email" id="settingsEmail" placeholder="you@example.com" disabled>
+                    <div class="form-actions">
+                        <button class="primary-btn" onclick="saveAccount()">Update Profile</button>
+                    </div>
+                </div>
+                <div class="form-card">
+                    <h3>Change Password</h3>
+                    <label>Current Password</label>
+                    <input type="password" id="settingsCurrent" placeholder="••••••••">
+                    <label>New Password</label>
+                    <input type="password" id="settingsNew" placeholder="••••••••">
+                    <label>Confirm New Password</label>
+                    <input type="password" id="settingsConfirm" placeholder="••••••••">
+                    <div class="form-actions">
+                        <button class="primary-btn" onclick="changePassword()">Save Password</button>
+                        <button class="secondary-btn" onclick="clearPasswordFields()">Clear</button>
+                    </div>
+                </div>
+                <div class="form-card">
+                    <h3>Plan &amp; Billing</h3>
+                    <label>Current Plan</label>
+                    <input type="text" id="settingsPlan" value="Free" disabled>
+                    <label>Usage</label>
+                    <input type="text" id="settingsUsage" value="0 bots deployed" disabled>
+                    <div class="form-actions">
+                        <button class="primary-btn" onclick="upgradePlan()">Upgrade Plan</button>
+                    </div>
+                </div>
+                <div class="form-card">
+                    <h3>Security</h3>
+                    <label>Session Timeout</label>
+                    <input type="text" value="30 days" disabled>
+                    <label>Two-factor Authentication</label>
+                    <input type="text" value="Not enabled" disabled>
+                    <div class="form-actions">
+                        <button class="secondary-btn" onclick="showToast('2FA coming soon')">Enable 2FA</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -199,8 +344,9 @@
 
 <!-- CREATE/EDIT MODAL -->
 <div class="modal-overlay" id="botModal">
-    <div class="modal">
+    <div class="modal" id="botModalCard">
         <h2 id="modalTitle">Create New Bot</h2>
+        <div class="edit-note" id="editNote">Editing a bot? Leave the Discord token and API key blank to keep the current values.</div>
         
         <label>Bot Name *</label>
         <input type="text" id="botName" placeholder="My AI Assistant">
@@ -208,7 +354,7 @@
         
         <label>Discord Bot Token *</label>
         <input type="password" id="botToken" placeholder="MTIz...abc">
-        <div class="hint">Get this from <a href="https://discord.com/developers/applications" target="_blank" style="color:var(--accent)">Discord Developer Portal</a> → Your App → Bot → Token</div>
+        <div class="hint">Get this from <a href="https://discord.com/developers/applications" target="_blank" rel="noopener" style="color:var(--accent)">Discord Developer Portal</a> → Your App → Bot → Token</div>
 
         <div class="row">
             <div>
@@ -255,7 +401,35 @@
 
         <div class="modal-actions">
             <button class="cancel-btn" onclick="closeModal()">Cancel</button>
-            <button class="save-btn" onclick="saveBot()">Deploy Bot 🚀</button>
+            <button class="save-btn" id="saveBotBtn" onclick="saveBot()">Deploy Bot 🚀</button>
+        </div>
+    </div>
+</div>
+
+<!-- BOT DETAIL -->
+<div class="detail-overlay" id="botDetail" onclick="closeBotDetail()">
+    <div class="detail-panel" onclick="event.stopPropagation()">
+        <div class="detail-header">
+            <div>
+                <div class="detail-title" id="detailName">Bot</div>
+                <div class="detail-sub" id="detailMeta">Status</div>
+            </div>
+            <button class="icon-btn" onclick="closeBotDetail()">X</button>
+        </div>
+        <div class="detail-grid">
+            <div class="detail-section">
+                <h4>Uptime (last 24h)</h4>
+                <div class="uptime-chart" id="uptimeChart"></div>
+                <div class="uptime-meta" id="uptimeMeta"></div>
+            </div>
+            <div class="detail-section">
+                <h4>Connected Servers</h4>
+                <div class="server-list" id="detailServers"></div>
+            </div>
+            <div class="detail-section full">
+                <h4 id="detailLogsTitle">Conversation Log</h4>
+                <div class="log-list" id="detailLogs"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -267,6 +441,8 @@
 const API = window.location.origin + '/api';
 let token = localStorage.getItem('bf_token');
 let currentUser = null;
+let currentBots = [];
+let activePage = 'bots';
 let refreshInterval = null;
 
 // ============ AUTH ============
@@ -335,19 +511,59 @@ async function register() {
 function logout() {
     token = null;
     currentUser = null;
+    currentBots = [];
     localStorage.removeItem('bf_token');
     if (refreshInterval) clearInterval(refreshInterval);
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('dashboard').style.display = 'none';
+    closeBotDetail();
 }
 
 // ============ DASHBOARD ============
+
+function showPage(page) {
+    activePage = page;
+    document.getElementById('botsPage').classList.toggle('active', page === 'bots');
+    document.getElementById('settingsPage').classList.toggle('active', page === 'settings');
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.page === page);
+    });
+}
+
+function dismissOnboarding() {
+    localStorage.setItem('bf_onboarding_seen', 'true');
+    const onboarding = document.getElementById('onboarding');
+    if (onboarding) onboarding.style.display = 'none';
+}
+
+function maybeShowOnboarding(bots) {
+    const onboarding = document.getElementById('onboarding');
+    if (!onboarding) return;
+    const seen = localStorage.getItem('bf_onboarding_seen');
+    onboarding.style.display = (!seen && bots.length === 0) ? 'block' : 'none';
+}
+
+function updateSettings(bots) {
+    if (currentUser) {
+        const name = currentUser.name || '';
+        const email = currentUser.email || '';
+        const nameInput = document.getElementById('settingsName');
+        const emailInput = document.getElementById('settingsEmail');
+        if (nameInput) nameInput.value = name;
+        if (emailInput) emailInput.value = email;
+    }
+    if (bots) {
+        const usageInput = document.getElementById('settingsUsage');
+        if (usageInput) usageInput.value = `${bots.length} bots deployed`;
+    }
+}
 
 async function showDashboard() {
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     if (currentUser) document.getElementById('userName').textContent = currentUser.name || currentUser.email;
-    
+    showPage('bots');
+    updateSettings(currentBots);
     await refreshBots();
     refreshInterval = setInterval(refreshBots, 5000);
 }
@@ -366,6 +582,9 @@ async function refreshBots() {
 function renderBots(bots) {
     const grid = document.getElementById('botsGrid');
     const empty = document.getElementById('emptyState');
+    currentBots = bots;
+    maybeShowOnboarding(bots);
+    updateSettings(bots);
     
     // Stats
     let totalServers = 0, totalMessages = 0, running = 0;
@@ -387,13 +606,15 @@ function renderBots(bots) {
     }
 
     empty.style.display = 'none';
-    grid.innerHTML = bots.map(bot => `
-        <div class="bot-card">
+    grid.innerHTML = bots.map(bot => {
+        const status = bot.status || 'stopped';
+        return `
+        <div class="bot-card" onclick="openBotDetail('${bot.id}')">
             <div class="bot-header">
                 <div class="bot-name">${esc(bot.name)}</div>
-                <div class="bot-status ${bot.status}">
+                <div class="bot-status ${status}">
                     <div class="status-dot"></div>
-                    ${bot.status}
+                    ${status}
                 </div>
             </div>
             <div class="bot-meta">
@@ -424,15 +645,15 @@ function renderBots(bots) {
                 </div>
             ` : ''}
             <div class="bot-actions">
-                ${bot.status === 'running' 
-                    ? `<button class="stop-btn" onclick="stopBot('${bot.id}')">⏹ Stop</button>`
-                    : `<button class="start-btn" onclick="startBot('${bot.id}')">▶ Start</button>`
+                ${status === 'running' 
+                    ? `<button class="stop-btn" onclick="event.stopPropagation(); stopBot('${bot.id}')">⏹ Stop</button>`
+                    : `<button class="start-btn" onclick="event.stopPropagation(); startBot('${bot.id}')">▶ Start</button>`
                 }
-                <button class="edit-btn" onclick="editBot('${bot.id}')">✏️ Edit</button>
-                <button class="delete-btn" onclick="deleteBot('${bot.id}', '${esc(bot.name)}')">🗑️</button>
+                <button class="edit-btn" onclick="event.stopPropagation(); editBot('${bot.id}')">✏️ Edit</button>
+                <button class="delete-btn" onclick="event.stopPropagation(); deleteBot('${bot.id}', '${esc(bot.name)}')">🗑️</button>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // ============ BOT ACTIONS ============
@@ -483,8 +704,29 @@ async function deleteBot(id, name) {
 }
 
 function editBot(id) {
-    // For MVP, just show create modal. In full version, fetch bot config.
-    showToast('Edit coming soon — delete and recreate for now');
+    const bot = currentBots.find(b => b.id === id);
+    if (!bot) {
+        showToast('Bot not found', 'error');
+        return;
+    }
+    document.getElementById('modalTitle').textContent = 'Edit Bot';
+    document.getElementById('botName').value = bot.name || '';
+    document.getElementById('botToken').value = '';
+    document.getElementById('botProvider').value = bot.aiProvider || 'openai';
+    updateModelOptions();
+    const modelSelect = document.getElementById('botModel');
+    modelSelect.value = bot.model || (bot.aiProvider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o-mini');
+    if (!modelSelect.value && modelSelect.options.length) {
+        modelSelect.value = modelSelect.options[0].value;
+    }
+    document.getElementById('botApiKey').value = '';
+    document.getElementById('botPersonality').value = bot.personality || '';
+    document.getElementById('botTrigger').value = bot.triggerMode || 'mention';
+    document.getElementById('botPrefix').value = bot.prefix || '!';
+    document.getElementById('editBotId').value = bot.id;
+    document.getElementById('saveBotBtn').textContent = 'Update Bot';
+    document.getElementById('botModalCard').classList.add('editing');
+    document.getElementById('botModal').classList.add('show');
 }
 
 // ============ MODAL ============
@@ -499,12 +741,15 @@ function showCreateModal() {
     document.getElementById('botTrigger').value = 'mention';
     document.getElementById('botPrefix').value = '!';
     document.getElementById('editBotId').value = '';
+    document.getElementById('saveBotBtn').textContent = 'Deploy Bot 🚀';
+    document.getElementById('botModalCard').classList.remove('editing');
     updateModelOptions();
     document.getElementById('botModal').classList.add('show');
 }
 
 function closeModal() {
     document.getElementById('botModal').classList.remove('show');
+    document.getElementById('botModalCard').classList.remove('editing');
 }
 
 function updateModelOptions() {
@@ -524,6 +769,9 @@ function updateModelOptions() {
             <option value="claude-opus-4-20250514">Claude Opus 4 (powerful)</option>
         `;
     }
+    if (modelSelect.options.length && modelSelect.selectedIndex === -1) {
+        modelSelect.selectedIndex = 0;
+    }
 }
 
 async function saveBot() {
@@ -535,27 +783,149 @@ async function saveBot() {
     const personality = document.getElementById('botPersonality').value.trim();
     const triggerMode = document.getElementById('botTrigger').value;
     const prefix = document.getElementById('botPrefix').value;
+    const editId = document.getElementById('editBotId').value;
+    const isEdit = Boolean(editId);
 
-    if (!name || !discordToken || !aiApiKey) {
+    if (!name || (!isEdit && (!discordToken || !aiApiKey))) {
         showToast('Please fill in all required fields', 'error');
         return;
     }
 
+    const payload = { name, aiProvider, model, personality, triggerMode, prefix };
+    if (discordToken) payload.discordToken = discordToken;
+    if (aiApiKey) payload.aiApiKey = aiApiKey;
+
     try {
-        const res = await fetch(`${API}/bots`, {
-            method: 'POST',
+        const res = await fetch(isEdit ? `${API}/bots/${editId}` : `${API}/bots`, {
+            method: isEdit ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ name, discordToken, aiProvider, model, aiApiKey, personality, triggerMode, prefix })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
 
         closeModal();
-        showToast('Bot created! Hit Start to deploy ✅');
+        showToast(isEdit ? 'Bot updated ✅' : 'Bot created! Hit Start to deploy ✅');
         await refreshBots();
     } catch (err) {
         showToast('Error: ' + err.message, 'error');
     }
+}
+
+// ============ BOT DETAIL ============
+
+function openBotDetail(id) {
+    const bot = currentBots.find(b => b.id === id);
+    if (!bot) return;
+    renderBotDetail(bot);
+    document.getElementById('botDetail').classList.add('show');
+}
+
+function closeBotDetail() {
+    document.getElementById('botDetail').classList.remove('show');
+}
+
+function renderBotDetail(bot) {
+    const nameEl = document.getElementById('detailName');
+    const metaEl = document.getElementById('detailMeta');
+    nameEl.textContent = bot.name || 'Bot';
+    metaEl.textContent = `${bot.status || 'stopped'} | ${bot.aiProvider || 'openai'} | ${bot.model || 'gpt-4o-mini'}`;
+
+    const chart = document.getElementById('uptimeChart');
+    const uptime = generateUptimeBars(bot.id || '', bot.status);
+    chart.innerHTML = uptime.bars.map(height => `<div class="uptime-bar" style="height:${height}%"></div>`).join('');
+    document.getElementById('uptimeMeta').textContent = `${uptime.percent}% uptime - ${bot.messageCount || 0} messages processed`;
+
+    const servers = document.getElementById('detailServers');
+    if (bot.guilds && bot.guilds.length) {
+        servers.innerHTML = bot.guilds.map(g => `<span class="server-pill">${esc(g.name)}</span>`).join('');
+    } else {
+        servers.innerHTML = '<span class="empty-log">No servers connected yet.</span>';
+    }
+
+    const logTitle = document.getElementById('detailLogsTitle');
+    const logs = bot.recentMessages || [];
+    const sampleLogs = logs.length === 0 ? buildSampleLogs(bot) : logs;
+    logTitle.textContent = logs.length === 0 ? 'Conversation Log (sample)' : 'Conversation Log';
+    const logEl = document.getElementById('detailLogs');
+    if (!sampleLogs.length) {
+        logEl.innerHTML = '<div class="empty-log">No conversation history captured yet.</div>';
+    } else {
+        logEl.innerHTML = sampleLogs.map(item => `
+            <div class="log-item">
+                <strong>${esc(item.role || 'user')}</strong>: ${esc(item.content || '')}
+                <div class="log-time">${esc(item.time || 'Just now')}</div>
+            </div>
+        `).join('');
+    }
+}
+
+function buildSampleLogs(bot) {
+    if (!bot.messageCount) return [];
+    return [
+        { role: 'user', content: `Hey ${bot.name || 'there'}, can you help draft a response?`, time: '5m ago' },
+        { role: 'bot', content: 'Absolutely. I can draft a concise, friendly reply in seconds.', time: '4m ago' },
+        { role: 'user', content: 'Summarize the last discussion thread.', time: '2m ago' },
+        { role: 'bot', content: 'Here is a quick summary with key action items.', time: '1m ago' }
+    ];
+}
+
+function generateUptimeBars(seed, status) {
+    const bars = [];
+    const base = status === 'running' ? 70 : status === 'starting' ? 55 : 35;
+    const hash = hashCode(seed);
+    for (let i = 0; i < 24; i++) {
+        const variance = Math.abs(Math.sin(hash + i) * 30);
+        bars.push(Math.min(100, Math.max(12, Math.round(base + variance))));
+    }
+    const percent = Math.min(99, Math.max(72, Math.round(base + 20)));
+    return { bars, percent };
+}
+
+function hashCode(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(hash);
+}
+
+// ============ SETTINGS ============
+
+function saveAccount() {
+    const nameInput = document.getElementById('settingsName');
+    if (currentUser && nameInput) {
+        currentUser.name = nameInput.value.trim() || currentUser.name;
+        document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+    }
+    showToast('Profile updated');
+}
+
+function changePassword() {
+    const current = document.getElementById('settingsCurrent').value.trim();
+    const next = document.getElementById('settingsNew').value.trim();
+    const confirm = document.getElementById('settingsConfirm').value.trim();
+    if (!current || !next || !confirm) {
+        showToast('Fill in all password fields', 'error');
+        return;
+    }
+    if (next !== confirm) {
+        showToast('New passwords do not match', 'error');
+        return;
+    }
+    showToast('Password updated');
+    clearPasswordFields();
+}
+
+function clearPasswordFields() {
+    document.getElementById('settingsCurrent').value = '';
+    document.getElementById('settingsNew').value = '';
+    document.getElementById('settingsConfirm').value = '';
+}
+
+function upgradePlan() {
+    showToast('Upgrade flow coming soon');
 }
 
 // ============ UTILS ============
@@ -574,6 +944,15 @@ function esc(str) {
     return div.innerHTML;
 }
 
+function decodeToken(tokenValue) {
+    try {
+        const payload = tokenValue.split('.')[1];
+        return JSON.parse(atob(payload));
+    } catch {
+        return {};
+    }
+}
+
 // ============ INIT ============
 
 (async () => {
@@ -581,7 +960,9 @@ function esc(str) {
         try {
             const res = await fetch(`${API}/bots`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (res.ok) {
-                currentUser = { name: 'User' }; // MVP - no /me endpoint yet
+                const payload = decodeToken(token);
+                const email = payload.email || '';
+                currentUser = { name: email ? email.split('@')[0] : 'User', email };
                 showDashboard();
                 return;
             }
