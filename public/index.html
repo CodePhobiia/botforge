@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        :root{--accent:#7C3AED;--accent-light:#A78BFA;--accent-dark:#5B21B6;--green:#10B981;--red:#EF4444;--yellow:#F59E0B;--bg:#09090B;--card:#18181B;--border:#27272A;--gray:#71717A;--light:#A1A1AA;--white:#FAFAFA}
+        :root{--accent:#7C3AED;--accent-light:#A78BFA;--accent-dark:#5B21B6;--green:#10B981;--red:#EF4444;--yellow:#F59E0B;--bg:#09090B;--card:#18181B;--border:#27272A;--gray:#71717A;--light:#A1A1AA;--white:#FAFAFA;--productivity:#38BDF8;--community:#34D399;--fun:#F97316;--surface:#0D0D11}
         body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);line-height:1.5;min-height:100vh}
         .mono{font-family:'JetBrains Mono',monospace}
 
@@ -128,16 +128,64 @@
         .page{display:none}
         .page.active{display:block}
 
+        /* Template Picker */
+        .template-modal{max-width:980px;background:linear-gradient(180deg,rgba(20,20,26,0.98),rgba(14,14,18,0.98));animation:riseIn 0.28s ease}
+        .template-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}
+        .template-header h2{font-size:22px;font-weight:800;margin-bottom:4px}
+        .template-header p{color:var(--gray);font-size:13px}
+        .template-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+        .template-tab{background:#0B0B10;border:1px solid var(--border);color:var(--light);padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s}
+        .template-tab.active{color:var(--white);border-color:var(--accent);box-shadow:0 0 0 1px rgba(124,58,237,0.2)}
+        .template-tab:hover{border-color:var(--accent);color:var(--accent)}
+        .template-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+        .template-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;min-height:180px;display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s,border-color 0.2s}
+        .template-card::after{content:'';position:absolute;inset:-40% -40% auto auto;width:120px;height:120px;background:radial-gradient(circle at center,rgba(255,255,255,0.08),transparent 70%);opacity:0;transition:opacity 0.2s}
+        .template-card:hover{transform:translateY(-4px);box-shadow:0 18px 30px rgba(0,0,0,0.35);border-color:var(--accent)}
+        .template-card:hover::after{opacity:1}
+        .template-emoji{font-size:28px}
+        .template-name{font-size:16px;font-weight:700}
+        .template-desc{font-size:12px;color:var(--gray);line-height:1.6}
+        .template-meta{display:flex;align-items:center;gap:8px;margin-top:auto;flex-wrap:wrap}
+        .template-category{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;padding:4px 8px;border-radius:999px;border:1px solid transparent}
+        .template-tag{font-size:11px;color:var(--light);background:#0B0B10;border:1px solid var(--border);padding:4px 8px;border-radius:999px}
+        .template-footer{display:flex;justify-content:space-between;align-items:center;margin-top:18px}
+        .template-loading,.template-empty{grid-column:1 / -1;text-align:center;color:var(--gray);padding:40px 0}
+        .template-card.category-productivity{--category-color:var(--productivity)}
+        .template-card.category-community{--category-color:var(--community)}
+        .template-card.category-fun{--category-color:var(--fun)}
+        .template-card.category-productivity .template-category{background:rgba(56,189,248,0.18);color:var(--productivity);border-color:rgba(56,189,248,0.4)}
+        .template-card.category-community .template-category{background:rgba(52,211,153,0.18);color:var(--community);border-color:rgba(52,211,153,0.4)}
+        .template-card.category-fun .template-category{background:rgba(249,115,22,0.18);color:var(--fun);border-color:rgba(249,115,22,0.4)}
+        .template-card.category-productivity:hover{border-color:var(--productivity)}
+        .template-card.category-community:hover{border-color:var(--community)}
+        .template-card.category-fun:hover{border-color:var(--fun)}
+        .template-selected{display:flex;align-items:center;gap:10px;background:#0B0B10;border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;margin:-10px 0 10px}
+        .template-selected strong{color:var(--white)}
+        .template-selected .ghost-btn{padding:4px 8px;font-size:11px}
+        @keyframes riseIn{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}
+
         /* Onboarding */
-        .onboarding{background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.4);border-radius:16px;padding:20px 24px;margin-bottom:24px}
-        .onboarding-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+        .onboarding{background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.4);border-radius:18px;padding:22px 24px;margin-bottom:24px;position:relative;overflow:hidden}
+        .onboarding::after{content:'';position:absolute;inset:auto -20% -30% auto;width:220px;height:220px;background:radial-gradient(circle,rgba(124,58,237,0.25),transparent 70%);opacity:0.6;pointer-events:none}
+        .onboarding-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
         .onboarding h3{font-size:18px;font-weight:700}
+        .onboarding-header p{color:var(--gray);font-size:13px;margin-top:4px}
         .ghost-btn{background:transparent;border:1px solid var(--border);color:var(--light);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit}
         .ghost-btn:hover{border-color:var(--accent);color:var(--accent)}
-        .onboarding-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-        .onboarding-step{background:#0d0d11;border:1px solid var(--border);border-radius:12px;padding:14px;font-size:12px;color:var(--light)}
-        .onboarding-step strong{display:block;color:var(--white);font-size:13px;margin-bottom:6px}
-        .onboarding-step a{color:var(--accent)}
+        .onboarding-body{display:grid;grid-template-columns:0.9fr 1.4fr;gap:16px;position:relative}
+        .onboarding-progress{display:grid;gap:10px}
+        .onboarding-progress-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;font-size:12px;color:var(--gray);display:flex;align-items:center;gap:10px;cursor:pointer;transition:all 0.2s}
+        .onboarding-progress-item .step-index{width:24px;height:24px;border-radius:999px;background:#111118;display:flex;align-items:center;justify-content:center;color:var(--light);font-size:11px;font-weight:700}
+        .onboarding-progress-item.active{border-color:rgba(124,58,237,0.6);color:var(--white);box-shadow:0 10px 20px rgba(0,0,0,0.25)}
+        .onboarding-progress-item.active .step-index{background:rgba(124,58,237,0.3);color:var(--white)}
+        .onboarding-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:180px}
+        .onboarding-card h4{font-size:16px;font-weight:700}
+        .onboarding-step-count{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--gray)}
+        .onboarding-actions{display:flex;flex-wrap:wrap;gap:10px}
+        .onboarding-actions a,.onboarding-actions button{font-size:12px;font-weight:600;border-radius:999px;padding:8px 14px;border:1px solid var(--border);background:#0B0B10;color:var(--light);text-decoration:none;cursor:pointer;transition:all 0.2s;font-family:inherit}
+        .onboarding-actions a:hover,.onboarding-actions button:hover{border-color:var(--accent);color:var(--accent)}
+        .onboarding-nav{display:flex;gap:10px;margin-top:auto}
+        .onboarding-nav button{flex:1}
 
         /* Bot Detail */
         .detail-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:120;align-items:center;justify-content:center;padding:20px}
@@ -183,7 +231,8 @@
             .modal .row{grid-template-columns:1fr}
             .nav-tabs{display:none}
             .detail-grid{grid-template-columns:1fr}
-            .onboarding-steps{grid-template-columns:1fr}
+            .onboarding-body{grid-template-columns:1fr}
+            .onboarding-progress{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
             .settings-grid{grid-template-columns:1fr}
             .form-row{grid-template-columns:1fr}
         }
@@ -239,21 +288,23 @@
         <div class="page active" id="botsPage">
             <div class="onboarding" id="onboarding" style="display:none">
                 <div class="onboarding-header">
-                    <h3>Welcome to BotForge</h3>
-                    <button class="ghost-btn" onclick="dismissOnboarding()">Got it</button>
+                    <div>
+                        <h3>Welcome to BotForge</h3>
+                        <p>Let’s get your first bot online in five quick steps.</p>
+                    </div>
+                    <button class="ghost-btn" onclick="dismissOnboarding()">Skip</button>
                 </div>
-                <div class="onboarding-steps">
-                    <div class="onboarding-step">
-                        <strong>1. Create a Discord bot</strong>
-                        Head to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a> and create a new application.
-                    </div>
-                    <div class="onboarding-step">
-                        <strong>2. Copy your bot token</strong>
-                        Open the Bot tab, reset the token, and keep it safe.
-                    </div>
-                    <div class="onboarding-step">
-                        <strong>3. Add your AI API key</strong>
-                        Bring your OpenAI or Anthropic API key to power your bot.
+                <div class="onboarding-body">
+                    <div class="onboarding-progress" id="onboardingProgress"></div>
+                    <div class="onboarding-card">
+                        <div class="onboarding-step-count" id="onboardingStepCount">Step 1 of 5</div>
+                        <h4 id="onboardingStepTitle"></h4>
+                        <p id="onboardingStepDesc"></p>
+                        <div class="onboarding-actions" id="onboardingStepActions"></div>
+                        <div class="onboarding-nav">
+                            <button class="secondary-btn" id="onboardingBack" onclick="prevOnboardingStep()">Back</button>
+                            <button class="primary-btn" id="onboardingNext" onclick="nextOnboardingStep()">Next</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -342,10 +393,34 @@
     </div>
 </div>
 
+<!-- TEMPLATE PICKER -->
+<div class="modal-overlay" id="templateModal">
+    <div class="modal template-modal" id="templateModalCard">
+        <div class="template-header">
+            <div>
+                <h2>Choose a Bot Template</h2>
+                <p>Start from a proven personality and tweak it later.</p>
+            </div>
+            <button class="icon-btn" onclick="closeTemplateModal()">X</button>
+        </div>
+        <div class="template-tabs" id="templateTabs"></div>
+        <div class="template-grid" id="templateGrid"></div>
+        <div class="template-footer">
+            <div class="hint">Tip: Templates prefill personality, model, and trigger mode.</div>
+            <button class="secondary-btn" onclick="startFromScratch()">Start from Scratch</button>
+        </div>
+    </div>
+</div>
+
 <!-- CREATE/EDIT MODAL -->
 <div class="modal-overlay" id="botModal">
     <div class="modal" id="botModalCard">
         <h2 id="modalTitle">Create New Bot</h2>
+        <div class="template-selected" id="templateSelected" style="display:none">
+            <span>Template:</span>
+            <strong id="templateSelectedName"></strong>
+            <button class="ghost-btn" onclick="showTemplateModal()">Change</button>
+        </div>
         <div class="edit-note" id="editNote">Editing a bot? Leave the Discord token and API key blank to keep the current values.</div>
         
         <label>Bot Name *</label>
@@ -444,6 +519,48 @@ let currentUser = null;
 let currentBots = [];
 let activePage = 'bots';
 let refreshInterval = null;
+let templates = [];
+let templatesLoaded = false;
+let templateFilter = 'All';
+let selectedTemplate = null;
+let onboardingStep = Number.parseInt(localStorage.getItem('bf_onboarding_step') || '0', 10) || 0;
+
+const onboardingSteps = [
+    {
+        title: 'Create a Discord Bot',
+        description: 'Head to the Discord Developer Portal, create a new application, and add a bot user. Enable any required intents so your bot can read messages and respond.',
+        actions: [
+            { type: 'link', label: 'Open Discord Developer Portal', href: 'https://discord.com/developers/applications' }
+        ]
+    },
+    {
+        title: 'Copy your bot token',
+        description: 'Open the Bot tab in your application, click Reset Token, and copy it somewhere safe. You will paste it into BotForge when you deploy.',
+        actions: []
+    },
+    {
+        title: 'Pick a template',
+        description: 'Choose a personality template to prefill tone, model, and trigger settings. You can always tweak the prompt later.',
+        actions: [
+            { type: 'button', label: 'Browse Templates', action: 'templates' }
+        ]
+    },
+    {
+        title: 'Add your AI API key',
+        description: 'OpenAI is great for fast, general-purpose chat and tools, while Anthropic shines for long-form and safety-focused responses. Grab a key from your provider and paste it into the form.',
+        actions: [
+            { type: 'link', label: 'Get OpenAI Key', href: 'https://platform.openai.com/account/api-keys' },
+            { type: 'link', label: 'Get Anthropic Key', href: 'https://console.anthropic.com/settings/keys' }
+        ]
+    },
+    {
+        title: 'Deploy!',
+        description: 'Click Deploy Bot in the form, then hit Start to go live in Discord. You can monitor status and tweak settings anytime.',
+        actions: [
+            { type: 'button', label: 'Create your first bot', action: 'templates' }
+        ]
+    }
+];
 
 // ============ AUTH ============
 
@@ -531,7 +648,8 @@ function showPage(page) {
 }
 
 function dismissOnboarding() {
-    localStorage.setItem('bf_onboarding_seen', 'true');
+    localStorage.setItem('bf_onboarding_done', 'true');
+    localStorage.removeItem('bf_onboarding_step');
     const onboarding = document.getElementById('onboarding');
     if (onboarding) onboarding.style.display = 'none';
 }
@@ -539,8 +657,81 @@ function dismissOnboarding() {
 function maybeShowOnboarding(bots) {
     const onboarding = document.getElementById('onboarding');
     if (!onboarding) return;
-    const seen = localStorage.getItem('bf_onboarding_seen');
-    onboarding.style.display = (!seen && bots.length === 0) ? 'block' : 'none';
+    const done = localStorage.getItem('bf_onboarding_done');
+    const shouldShow = !done && bots.length === 0;
+    onboarding.style.display = shouldShow ? 'block' : 'none';
+    if (shouldShow) renderOnboardingStep();
+}
+
+function renderOnboardingStep() {
+    onboardingStep = Math.min(Math.max(onboardingStep, 0), onboardingSteps.length - 1);
+    const step = onboardingSteps[onboardingStep] || onboardingSteps[0];
+    const countEl = document.getElementById('onboardingStepCount');
+    const titleEl = document.getElementById('onboardingStepTitle');
+    const descEl = document.getElementById('onboardingStepDesc');
+    const actionsEl = document.getElementById('onboardingStepActions');
+    const progressEl = document.getElementById('onboardingProgress');
+    const backBtn = document.getElementById('onboardingBack');
+    const nextBtn = document.getElementById('onboardingNext');
+
+    if (!countEl || !titleEl || !descEl || !actionsEl || !progressEl || !backBtn || !nextBtn) return;
+
+    countEl.textContent = `Step ${onboardingStep + 1} of ${onboardingSteps.length}`;
+    titleEl.textContent = step.title;
+    descEl.textContent = step.description;
+
+    actionsEl.innerHTML = '';
+    step.actions.forEach((action) => {
+        if (action.type === 'link') {
+            const link = document.createElement('a');
+            link.href = action.href;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = action.label;
+            actionsEl.appendChild(link);
+        } else if (action.type === 'button') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = action.label;
+            btn.addEventListener('click', () => {
+                if (action.action === 'templates') showTemplateModal();
+            });
+            actionsEl.appendChild(btn);
+        }
+    });
+
+    progressEl.innerHTML = '';
+    onboardingSteps.forEach((item, index) => {
+        const stepBtn = document.createElement('button');
+        stepBtn.type = 'button';
+        stepBtn.className = 'onboarding-progress-item' + (index === onboardingStep ? ' active' : '');
+        stepBtn.innerHTML = `<span class="step-index">${index + 1}</span><span>${item.title}</span>`;
+        stepBtn.addEventListener('click', () => {
+            onboardingStep = index;
+            localStorage.setItem('bf_onboarding_step', onboardingStep.toString());
+            renderOnboardingStep();
+        });
+        progressEl.appendChild(stepBtn);
+    });
+
+    backBtn.disabled = onboardingStep === 0;
+    nextBtn.textContent = onboardingStep === onboardingSteps.length - 1 ? 'Finish' : 'Next';
+    localStorage.setItem('bf_onboarding_step', onboardingStep.toString());
+}
+
+function nextOnboardingStep() {
+    if (onboardingStep >= onboardingSteps.length - 1) {
+        dismissOnboarding();
+        return;
+    }
+    onboardingStep = Math.min(onboardingSteps.length - 1, onboardingStep + 1);
+    renderOnboardingStep();
+}
+
+function prevOnboardingStep() {
+    if (onboardingStep <= 0) return;
+    onboardingStep = Math.max(0, onboardingStep - 1);
+    renderOnboardingStep();
 }
 
 function updateSettings(bots) {
@@ -564,6 +755,7 @@ async function showDashboard() {
     if (currentUser) document.getElementById('userName').textContent = currentUser.name || currentUser.email;
     showPage('bots');
     updateSettings(currentBots);
+    loadTemplates();
     await refreshBots();
     refreshInterval = setInterval(refreshBots, 5000);
 }
@@ -726,12 +918,157 @@ function editBot(id) {
     document.getElementById('editBotId').value = bot.id;
     document.getElementById('saveBotBtn').textContent = 'Update Bot';
     document.getElementById('botModalCard').classList.add('editing');
+    selectedTemplate = null;
+    updateTemplateSelected();
     document.getElementById('botModal').classList.add('show');
+}
+
+// ============ TEMPLATES ============
+
+function inferProviderFromModel(model) {
+    if (!model) return 'openai';
+    return model.startsWith('claude') ? 'anthropic' : 'openai';
+}
+
+async function loadTemplates() {
+    if (templatesLoaded) return templates;
+    const grid = document.getElementById('templateGrid');
+    if (grid) grid.innerHTML = '<div class="template-loading">Loading templates…</div>';
+
+    try {
+        const res = await fetch(`${API}/templates`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load templates');
+        templates = Array.isArray(data.templates) ? data.templates : [];
+        templatesLoaded = true;
+    } catch (err) {
+        console.error('Failed to load templates:', err);
+        templates = [];
+        templatesLoaded = false;
+        if (grid) {
+            grid.innerHTML = '<div class="template-empty">Couldn’t load templates. <button class="secondary-btn" onclick="retryTemplates()">Retry</button></div>';
+        }
+    }
+    return templates;
+}
+
+function retryTemplates() {
+    templatesLoaded = false;
+    loadTemplates().then(() => {
+        renderTemplateTabs();
+        renderTemplateGrid();
+    });
+}
+
+function showTemplateModal() {
+    const overlay = document.getElementById('templateModal');
+    if (!overlay) return;
+    const botOverlay = document.getElementById('botModal');
+    if (botOverlay) botOverlay.classList.remove('show');
+    overlay.classList.add('show');
+    templateFilter = 'All';
+    loadTemplates().then(() => {
+        renderTemplateTabs();
+        renderTemplateGrid();
+    });
+}
+
+function closeTemplateModal() {
+    const overlay = document.getElementById('templateModal');
+    if (overlay) overlay.classList.remove('show');
+}
+
+function renderTemplateTabs() {
+    const tabs = document.getElementById('templateTabs');
+    if (!tabs) return;
+    const categories = ['All', ...new Set(templates.map((t) => t.category).filter(Boolean))];
+    tabs.innerHTML = '';
+    categories.forEach((category) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'template-tab' + (templateFilter === category ? ' active' : '');
+        btn.textContent = category;
+        btn.addEventListener('click', () => {
+            templateFilter = category;
+            renderTemplateTabs();
+            renderTemplateGrid();
+        });
+        tabs.appendChild(btn);
+    });
+}
+
+function renderTemplateGrid() {
+    const grid = document.getElementById('templateGrid');
+    if (!grid) return;
+    const visible = templateFilter === 'All'
+        ? templates
+        : templates.filter((template) => template.category === templateFilter);
+
+    if (!visible.length) {
+        grid.innerHTML = '<div class="template-empty">No templates match this category yet.</div>';
+        return;
+    }
+
+    grid.innerHTML = visible.map((template) => {
+        const slug = (template.category || '').toLowerCase().replace(/\s+/g, '-');
+        return `
+            <div class="template-card category-${slug}" data-template-id="${esc(template.id)}">
+                <div class="template-emoji">${esc(template.emoji || '🤖')}</div>
+                <div class="template-name">${esc(template.name)}</div>
+                <div class="template-desc">${esc(template.description)}</div>
+                <div class="template-meta">
+                    <span class="template-category">${esc(template.category || 'Template')}</span>
+                    <span class="template-tag">${esc(template.suggestedModel || 'model')}</span>
+                    <span class="template-tag">${esc(template.suggestedTrigger || 'mention')}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    grid.querySelectorAll('.template-card').forEach((card) => {
+        card.addEventListener('click', () => {
+            const templateId = card.dataset.templateId;
+            applyTemplate(templateId);
+        });
+    });
+}
+
+function applyTemplate(templateId) {
+    const template = templates.find((item) => item.id === templateId);
+    if (!template) {
+        showToast('Template not found', 'error');
+        return;
+    }
+    closeTemplateModal();
+    openCreateModalWithTemplate(template);
+}
+
+function startFromScratch() {
+    closeTemplateModal();
+    openBlankCreateModal();
+}
+
+function updateTemplateSelected() {
+    const wrap = document.getElementById('templateSelected');
+    const nameEl = document.getElementById('templateSelectedName');
+    if (!wrap || !nameEl) return;
+    if (!selectedTemplate) {
+        wrap.style.display = 'none';
+        nameEl.textContent = '';
+        return;
+    }
+    nameEl.textContent = `${selectedTemplate.emoji || ''} ${selectedTemplate.name}`.trim();
+    wrap.style.display = 'flex';
 }
 
 // ============ MODAL ============
 
 function showCreateModal() {
+    selectedTemplate = null;
+    showTemplateModal();
+}
+
+function openBlankCreateModal() {
     document.getElementById('modalTitle').textContent = 'Create New Bot';
     document.getElementById('botName').value = '';
     document.getElementById('botToken').value = '';
@@ -743,8 +1080,30 @@ function showCreateModal() {
     document.getElementById('editBotId').value = '';
     document.getElementById('saveBotBtn').textContent = 'Deploy Bot 🚀';
     document.getElementById('botModalCard').classList.remove('editing');
+    selectedTemplate = null;
+    updateTemplateSelected();
     updateModelOptions();
     document.getElementById('botModal').classList.add('show');
+}
+
+function openCreateModalWithTemplate(template) {
+    openBlankCreateModal();
+    selectedTemplate = template;
+    document.getElementById('botPersonality').value = template.systemPrompt || '';
+    document.getElementById('botTrigger').value = template.suggestedTrigger || 'mention';
+
+    const provider = inferProviderFromModel(template.suggestedModel);
+    document.getElementById('botProvider').value = provider;
+    updateModelOptions();
+    const modelSelect = document.getElementById('botModel');
+    if (template.suggestedModel) {
+        modelSelect.value = template.suggestedModel;
+        if (!modelSelect.value && modelSelect.options.length) {
+            modelSelect.selectedIndex = 0;
+        }
+    }
+
+    updateTemplateSelected();
 }
 
 function closeModal() {
@@ -794,6 +1153,9 @@ async function saveBot() {
     const payload = { name, aiProvider, model, personality, triggerMode, prefix };
     if (discordToken) payload.discordToken = discordToken;
     if (aiApiKey) payload.aiApiKey = aiApiKey;
+    if (!isEdit && selectedTemplate && Array.isArray(selectedTemplate.suggestedTools)) {
+        payload.tools = selectedTemplate.suggestedTools;
+    }
 
     try {
         const res = await fetch(isEdit ? `${API}/bots/${editId}` : `${API}/bots`, {
