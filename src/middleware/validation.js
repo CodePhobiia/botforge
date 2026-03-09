@@ -87,6 +87,28 @@ function validateStringArray(value, { field, maxItems, maxLen }) {
     return null;
 }
 
+function validateRateLimits(value) {
+    if (value === null) return null;
+    if (!value || typeof value !== 'object') {
+        return 'rateLimits must be an object';
+    }
+    const sections = ['user', 'bot'];
+    for (const section of sections) {
+        if (value[section] === undefined) continue;
+        if (!value[section] || typeof value[section] !== 'object') {
+            return `${section} limits must be an object`;
+        }
+        for (const key of ['perMinute', 'perHour', 'perDay']) {
+            if (value[section][key] === undefined) continue;
+            const val = value[section][key];
+            if (!Number.isInteger(val) || val < 0) {
+                return `${section}.${key} must be a non-negative integer`;
+            }
+        }
+    }
+    return null;
+}
+
 function validateBotIdParam(req, res, next) {
     if (req.params) {
         req.params = sanitizeObject(req.params);
@@ -253,6 +275,41 @@ function validateUpdateBot(req, res, next) {
             return badRequest(res, 'historyLimit must be an integer between 1 and 1000');
         }
     }
+    if (updates.rateLimits !== undefined) {
+        const error = validateRateLimits(updates.rateLimits);
+        if (error) return badRequest(res, error);
+    }
+
+    return next();
+}
+
+function validateUpdateBotConfig(req, res, next) {
+    req.body = sanitizeObject(req.body || {});
+    const updates = req.body;
+
+    if (updates.personality !== undefined) {
+        if (typeof updates.personality !== 'string' || updates.personality.length > LIMITS.personalityMax) {
+            return badRequest(res, `Personality must be at most ${LIMITS.personalityMax} characters`);
+        }
+    }
+    if (updates.model !== undefined && (typeof updates.model !== 'string' || updates.model.length > LIMITS.modelMax)) {
+        return badRequest(res, `Model must be at most ${LIMITS.modelMax} characters`);
+    }
+    if (updates.triggerMode !== undefined && !ALLOWED_TRIGGER_MODES.has(updates.triggerMode)) {
+        return badRequest(res, 'Invalid trigger mode');
+    }
+    if (updates.tools !== undefined) {
+        const error = validateStringArray(updates.tools, {
+            field: 'tools',
+            maxItems: LIMITS.arrayItemsMax,
+            maxLen: LIMITS.arrayItemMaxLen
+        });
+        if (error) return badRequest(res, error);
+    }
+    if (updates.rateLimits !== undefined) {
+        const error = validateRateLimits(updates.rateLimits);
+        if (error) return badRequest(res, error);
+    }
 
     return next();
 }
@@ -277,6 +334,7 @@ module.exports = {
     validateLogin,
     validateCreateBot,
     validateUpdateBot,
+    validateUpdateBotConfig,
     validateBotIdParam,
     validateBotTools,
     sanitizeObject

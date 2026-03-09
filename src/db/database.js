@@ -23,6 +23,17 @@ function ensureUserColumns(database) {
     database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id)');
 }
 
+function ensureBotColumns(database) {
+    const columns = database.prepare(`PRAGMA table_info(bots)`).all().map((row) => row.name);
+    const addColumn = (name, type) => {
+        if (!columns.includes(name)) {
+            database.exec(`ALTER TABLE bots ADD COLUMN ${name} ${type}`);
+        }
+    };
+
+    addColumn('rate_limits_json', 'TEXT');
+}
+
 function initDatabase() {
     if (db) return db;
 
@@ -59,6 +70,7 @@ function initDatabase() {
             prefix TEXT NOT NULL,
             channels_json TEXT NOT NULL,
             tools_json TEXT NOT NULL,
+            rate_limits_json TEXT,
             max_tokens INTEGER NOT NULL,
             history_limit INTEGER NOT NULL,
             created_at TEXT NOT NULL,
@@ -75,11 +87,29 @@ function initDatabase() {
             FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS conversation_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_id TEXT NOT NULL,
+            user_id TEXT,
+            username TEXT,
+            channel_id TEXT,
+            channel_name TEXT,
+            message_content TEXT,
+            bot_response TEXT,
+            timestamp TEXT NOT NULL,
+            model_used TEXT,
+            tokens_used INTEGER,
+            FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id);
         CREATE INDEX IF NOT EXISTS idx_bot_logs_bot_id ON bot_logs(bot_id);
+        CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_id ON conversation_logs(bot_id);
+        CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_time ON conversation_logs(bot_id, timestamp);
     `);
 
     ensureUserColumns(db);
+    ensureBotColumns(db);
 
     return db;
 }
@@ -106,12 +136,12 @@ const statements = {
         INSERT INTO bots (
             id, user_id, name, discord_token_encrypted, ai_provider,
             ai_api_key_encrypted, model, personality, trigger_mode, prefix,
-            channels_json, tools_json, max_tokens, history_limit,
+            channels_json, tools_json, rate_limits_json, max_tokens, history_limit,
             created_at, updated_at
         ) VALUES (
             @id, @user_id, @name, @discord_token_encrypted, @ai_provider,
             @ai_api_key_encrypted, @model, @personality, @trigger_mode, @prefix,
-            @channels_json, @tools_json, @max_tokens, @history_limit,
+            @channels_json, @tools_json, @rate_limits_json, @max_tokens, @history_limit,
             @created_at, @updated_at
         )
     `),
@@ -127,6 +157,7 @@ const statements = {
             prefix = @prefix,
             channels_json = @channels_json,
             tools_json = @tools_json,
+            rate_limits_json = @rate_limits_json,
             max_tokens = @max_tokens,
             history_limit = @history_limit,
             updated_at = @updated_at
@@ -145,6 +176,37 @@ const statements = {
         WHERE bot_id = ? AND event_type IN ('started', 'stopped')
         ORDER BY created_at DESC, id DESC
         LIMIT 1
+    `),
+    insertConversationLog: database.prepare(`
+        INSERT INTO conversation_logs (
+            bot_id, user_id, username, channel_id, channel_name,
+            message_content, bot_response, timestamp, model_used, tokens_used
+        ) VALUES (
+            @bot_id, @user_id, @username, @channel_id, @channel_name,
+            @message_content, @bot_response, @timestamp, @model_used, @tokens_used
+        )
+    `),
+    getConversationsByBot: database.prepare(`
+        SELECT * FROM conversation_logs
+        WHERE bot_id = ?
+        ORDER BY timestamp DESC, id DESC
+        LIMIT ? OFFSET ?
+    `),
+    searchConversationsByBot: database.prepare(`
+        SELECT * FROM conversation_logs
+        WHERE bot_id = @bot_id AND (
+            message_content LIKE @pattern OR
+            bot_response LIKE @pattern OR
+            username LIKE @pattern OR
+            channel_name LIKE @pattern
+        )
+        ORDER BY timestamp DESC, id DESC
+        LIMIT 200
+    `),
+    getAllConversationsByBot: database.prepare(`
+        SELECT * FROM conversation_logs
+        WHERE bot_id = ?
+        ORDER BY timestamp ASC, id ASC
     `)
 };
 
@@ -192,10 +254,28 @@ function mapBotRow(row) {
         prefix: row.prefix,
         channels: safeJsonParse(row.channels_json, []),
         tools: safeJsonParse(row.tools_json, []),
+        rateLimits: safeJsonParse(row.rate_limits_json, null),
         maxTokens: row.max_tokens,
         historyLimit: row.history_limit,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at)
+    };
+}
+
+function mapConversationRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        botId: row.bot_id,
+        userId: row.user_id,
+        username: row.username,
+        channelId: row.channel_id,
+        channelName: row.channel_name,
+        messageContent: row.message_content,
+        botResponse: row.bot_response,
+        timestamp: row.timestamp,
+        modelUsed: row.model_used,
+        tokensUsed: row.tokens_used
     };
 }
 
@@ -276,6 +356,7 @@ function createBot(config) {
         prefix: config.prefix,
         channels_json: JSON.stringify(channelsValue),
         tools_json: JSON.stringify(toolsValue),
+        rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         created_at: createdAt,
@@ -320,6 +401,7 @@ function updateBot(userId, botId, updates) {
     if (hasProp('prefix')) config.prefix = updates.prefix;
     if (hasProp('channels')) config.channels = updates.channels;
     if (hasProp('tools')) config.tools = updates.tools;
+    if (hasProp('rateLimits')) config.rateLimits = updates.rateLimits;
     if (hasProp('maxTokens')) config.maxTokens = updates.maxTokens;
     if (hasProp('historyLimit')) config.historyLimit = updates.historyLimit;
 
@@ -341,6 +423,7 @@ function updateBot(userId, botId, updates) {
         prefix: config.prefix,
         channels_json: JSON.stringify(channelsValue),
         tools_json: JSON.stringify(toolsValue),
+        rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         updated_at: updatedAt.toISOString()
@@ -375,6 +458,49 @@ function getLatestBotStatusEvent(botId) {
     };
 }
 
+function logConversation({
+    botId,
+    userId = null,
+    username = null,
+    channelId = null,
+    channelName = null,
+    messageContent = null,
+    botResponse = null,
+    timestamp = null,
+    modelUsed = null,
+    tokensUsed = null
+}) {
+    const stamped = timestamp ? toIso(timestamp) : new Date().toISOString();
+    statements.insertConversationLog.run({
+        bot_id: botId,
+        user_id: userId,
+        username,
+        channel_id: channelId,
+        channel_name: channelName,
+        message_content: messageContent,
+        bot_response: botResponse,
+        timestamp: stamped,
+        model_used: modelUsed,
+        tokens_used: Number.isFinite(tokensUsed) ? tokensUsed : null
+    });
+}
+
+function getConversationsByBot(botId, limit = 50, offset = 0) {
+    const rows = statements.getConversationsByBot.all(botId, limit, offset);
+    return rows.map(mapConversationRow);
+}
+
+function searchConversations(botId, query) {
+    const pattern = `%${query}%`;
+    const rows = statements.searchConversationsByBot.all({ bot_id: botId, pattern });
+    return rows.map(mapConversationRow);
+}
+
+function getAllConversationsByBot(botId) {
+    const rows = statements.getAllConversationsByBot.all(botId);
+    return rows.map(mapConversationRow);
+}
+
 module.exports = {
     initDatabase,
     createUser,
@@ -390,5 +516,9 @@ module.exports = {
     updateBot,
     deleteBot,
     logBotEvent,
-    getLatestBotStatusEvent
+    getLatestBotStatusEvent,
+    logConversation,
+    getConversationsByBot,
+    searchConversations,
+    getAllConversationsByBot
 };

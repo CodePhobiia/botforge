@@ -18,6 +18,7 @@ const {
     validateLogin,
     validateCreateBot,
     validateUpdateBot,
+    validateUpdateBotConfig,
     validateBotIdParam,
     validateBotTools
 } = require('../middleware/validation');
@@ -32,7 +33,10 @@ const {
     updateBot: updateBotRecord,
     deleteBot: deleteBotRecord,
     logBotEvent,
-    getLatestBotStatusEvent
+    getLatestBotStatusEvent,
+    getConversationsByBot,
+    searchConversations,
+    getAllConversationsByBot
 } = require('../db/database');
 
 const app = express();
@@ -53,6 +57,54 @@ function maskBotForResponse(config, status = null) {
     const { discordToken, aiApiKey, updatedAt, ...rest } = config;
     const payload = status ? { ...rest, ...status } : rest;
     return { ...payload, discordToken: '***', aiApiKey: '***' };
+}
+
+function findUserBot(userId, botId) {
+    return getBotById(userId, botId);
+}
+
+function escapeCsv(value) {
+    if (value === null || value === undefined) return '';
+    const stringValue = String(value);
+    if (/[",\n\r]/.test(stringValue)) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+}
+
+function buildConversationCsv(conversations) {
+    const headers = [
+        'id',
+        'bot_id',
+        'user_id',
+        'username',
+        'channel_id',
+        'channel_name',
+        'message_content',
+        'bot_response',
+        'timestamp',
+        'model_used',
+        'tokens_used'
+    ];
+
+    const lines = [headers.join(',')];
+    for (const convo of conversations) {
+        const row = [
+            convo.id,
+            convo.botId,
+            convo.userId,
+            convo.username,
+            convo.channelId,
+            convo.channelName,
+            convo.messageContent,
+            convo.botResponse,
+            convo.timestamp,
+            convo.modelUsed,
+            convo.tokensUsed
+        ].map(escapeCsv);
+        lines.push(row.join(','));
+    }
+    return lines.join('\n');
 }
 
 // ============ AUTH ============
@@ -260,6 +312,29 @@ app.put('/api/bots/:id', auth, validateBotIdParam, validateUpdateBot, async (req
     }
 });
 
+// Update bot config without restarting
+app.patch('/api/bots/:id/config', auth, validateBotIdParam, validateUpdateBotConfig, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const updates = req.body || {};
+        const storedConfig = updateBotRecord(req.userId, req.params.id, updates);
+        logBotEvent(req.params.id, 'config-updated', 'Bot config updated (live)');
+
+        let status = null;
+        try {
+            status = botManager.updateBotConfig(config.id, updates);
+        } catch (err) {
+            console.warn(`[BotForge] Live config update skipped for ${config.id}:`, err.message);
+        }
+
+        res.json({ bot: maskBotForResponse(storedConfig || config, status) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Delete a bot
 app.delete('/api/bots/:id', auth, validateBotIdParam, async (req, res) => {
     try {
@@ -333,13 +408,57 @@ app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, asyn
     }
 });
 
-// Get conversation history by channel
+// Get conversation history (paginated)
 app.get('/api/bots/:id/conversations', auth, validateBotIdParam, (req, res) => {
     try {
         const config = findUserBot(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
-        const conversations = botManager.getBotConversations(config.id);
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const conversations = getConversationsByBot(config.id, limit, offset);
+        res.json({ conversations, limit, offset });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Search conversations
+app.get('/api/bots/:id/conversations/search', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = findUserBot(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const query = String(req.query.q || '').trim();
+        if (!query) return res.status(400).json({ error: 'Search query required' });
+
+        const conversations = searchConversations(config.id, query);
+        res.json({ conversations, query });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Export conversations
+app.get('/api/bots/:id/conversations/export', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = findUserBot(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const format = String(req.query.format || 'json').toLowerCase();
+        const conversations = getAllConversationsByBot(config.id);
+
+        if (format === 'csv') {
+            const csv = buildConversationCsv(conversations);
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="bot-${config.id}-conversations.csv"`);
+            return res.send(csv);
+        }
+
+        if (format !== 'json') {
+            return res.status(400).json({ error: 'Unsupported export format' });
+        }
+
         res.json({ conversations });
     } catch (err) {
         res.status(500).json({ error: err.message });

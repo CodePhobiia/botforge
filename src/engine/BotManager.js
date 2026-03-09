@@ -7,6 +7,7 @@ const { Client, GatewayIntentBits, Events } = require('discord.js');
 const { generateResponse } = require('./AIProvider');
 const { ToolSystem } = require('./ToolSystem');
 const { RateLimiter } = require('./RateLimiter');
+const { logConversation } = require('../db/database');
 
 const DEFAULT_MESSAGE_LOG_LIMIT = 100;
 const MAX_TOOL_ROUNDS = 2;
@@ -23,6 +24,7 @@ class BotInstance {
         this.model = config.model || 'gpt-4o-mini';
         this.personality = config.personality || 'You are a helpful assistant.';
         this.tools = config.tools || [];
+        this.rateLimits = config.rateLimits || null;
         this.channels = config.channels || []; // empty = all channels
         this.status = 'stopped'; // stopped | starting | running | error | reconnecting
         this.client = null;
@@ -193,7 +195,8 @@ class BotInstance {
 
         const rateResult = this.rateLimiter?.checkAndRecord({
             userId: message.author.id,
-            botId: this.id
+            botId: this.id,
+            limits: this.rateLimits
         });
 
         if (rateResult && !rateResult.allowed) {
@@ -214,7 +217,7 @@ class BotInstance {
         try {
             if (message.channel.sendTyping) await message.channel.sendTyping();
 
-            let response = await generateResponse({
+            const initialResult = await generateResponse({
                 provider: this.aiProvider,
                 apiKey: this.aiApiKey,
                 model: this.model,
@@ -223,12 +226,23 @@ class BotInstance {
                 maxTokens: this.maxTokens
             });
 
-            response = await this._processToolCalls(response, history, message);
-            const finalResponse = this.toolSystem ? this.toolSystem.stripToolCalls(response) : response;
+            const processed = await this._processToolCalls(initialResult, history, message);
+            const finalResponse = this.toolSystem ? this.toolSystem.stripToolCalls(processed.content) : processed.content;
 
             const sentMessages = await this._sendResponseToMessage(message, finalResponse);
             this._appendHistory(channelId, { role: 'assistant', content: finalResponse });
             this._logOutgoingMessages(channelId, finalResponse, sentMessages);
+            this._logConversationEntry({
+                userId: message.author.id,
+                username: this._displayName(message),
+                channelId,
+                channelName: message.channel?.name || null,
+                messageContent: message.content,
+                botResponse: finalResponse,
+                timestamp: message.createdTimestamp || Date.now(),
+                modelUsed: processed.modelUsed || this.model,
+                tokensUsed: processed.tokensUsed
+            });
 
             this.messageCount++;
             this._recordResponse(Date.now() - startTime);
@@ -239,7 +253,10 @@ class BotInstance {
                     channelId,
                     userMessage: message.content,
                     response: finalResponse,
-                    isCollaborationResponse: false
+                    isCollaborationResponse: false,
+                    userId: message.author.id,
+                    username: this._displayName(message),
+                    channelName: message.channel?.name || null
                 });
             }
         } catch (err) {
@@ -302,10 +319,18 @@ class BotInstance {
         return history.map(entry => ({ role: entry.role, content: entry.content }));
     }
 
-    async _processToolCalls(initialResponse, history, message) {
-        if (!this.toolSystem) return initialResponse;
+    async _processToolCalls(initialResult, history, message) {
+        const tracker = this._createTokenTracker(initialResult);
+        let response = this._extractAIContent(initialResult);
 
-        let response = initialResponse;
+        if (!this.toolSystem) {
+            return {
+                content: response,
+                tokensUsed: tracker.getTokensUsed(),
+                modelUsed: tracker.getModelUsed()
+            };
+        }
+
         let rounds = 0;
 
         while (rounds < MAX_TOOL_ROUNDS) {
@@ -342,7 +367,7 @@ class BotInstance {
                 content: `Tool results:\n${toolSummary}\nPlease provide a final response to the user.`
             });
 
-            response = await generateResponse({
+            const toolResult = await generateResponse({
                 provider: this.aiProvider,
                 apiKey: this.aiApiKey,
                 model: this.model,
@@ -350,11 +375,17 @@ class BotInstance {
                 messages: this._buildMessagesForAI(history),
                 maxTokens: this.maxTokens
             });
+            tracker.add(toolResult);
+            response = this._extractAIContent(toolResult);
 
             rounds++;
         }
 
-        return response;
+        return {
+            content: response,
+            tokensUsed: tracker.getTokensUsed(),
+            modelUsed: tracker.getModelUsed()
+        };
     }
 
     _formatToolResults(results) {
@@ -364,7 +395,7 @@ class BotInstance {
         }).join('\n');
     }
 
-    async respondToCollaboration({ channelId, originBot, userMessage, response }) {
+    async respondToCollaboration({ channelId, originBot, userMessage, response, userId, username, channelName }) {
         if (this.collaborationMode === 'off') return;
         if (!this.client) return;
 
@@ -385,7 +416,7 @@ class BotInstance {
             const history = this._getHistory(channelId);
             const prompt = `Another bot (${originBot.name}) replied: "${response}". Add a brief helpful follow-up (1-2 sentences). If there is nothing to add, reply with "SKIP".`;
 
-            const collabResponse = await generateResponse({
+            const collabResult = await generateResponse({
                 provider: this.aiProvider,
                 apiKey: this.aiApiKey,
                 model: this.model,
@@ -394,7 +425,7 @@ class BotInstance {
                 maxTokens: Math.min(this.maxTokens, 512)
             });
 
-            const trimmed = collabResponse.trim();
+            const trimmed = this._extractAIContent(collabResult).trim();
             if (!trimmed || trimmed.toUpperCase() === 'SKIP') return;
 
             const finalResponse = this.toolSystem ? this.toolSystem.stripToolCalls(trimmed) : trimmed;
@@ -403,6 +434,17 @@ class BotInstance {
             this._appendHistory(channelId, { role: 'assistant', content: finalResponse });
             this._logOutgoingMessages(channelId, finalResponse, sentMessages);
             this.messageCount++;
+            this._logConversationEntry({
+                userId: userId || null,
+                username: username || null,
+                channelId,
+                channelName: channelName || null,
+                messageContent: userMessage,
+                botResponse: finalResponse,
+                timestamp: new Date().toISOString(),
+                modelUsed: this._extractModelUsed(collabResult) || this.model,
+                tokensUsed: this._extractTokensUsed(collabResult)
+            });
 
             if (this.manager) {
                 this.manager.notifyBotResponse({
@@ -676,6 +718,74 @@ class BotInstance {
         }
         return conversations;
     }
+
+    _extractAIContent(result) {
+        if (typeof result === 'string') return result;
+        return result?.content || '';
+    }
+
+    _extractTokensUsed(result) {
+        if (!result || typeof result === 'string') return null;
+        return Number.isFinite(result.tokensUsed) ? result.tokensUsed : null;
+    }
+
+    _extractModelUsed(result) {
+        if (!result || typeof result === 'string') return null;
+        return result.modelUsed || null;
+    }
+
+    _createTokenTracker(initialResult) {
+        let totalTokens = 0;
+        let hasTokens = false;
+        let modelUsed = this._extractModelUsed(initialResult) || this.model;
+
+        const add = (result) => {
+            const tokens = this._extractTokensUsed(result);
+            if (Number.isFinite(tokens)) {
+                totalTokens += tokens;
+                hasTokens = true;
+            }
+            const model = this._extractModelUsed(result);
+            if (model) modelUsed = model;
+        };
+
+        add(initialResult);
+
+        return {
+            add,
+            getTokensUsed: () => (hasTokens ? totalTokens : null),
+            getModelUsed: () => modelUsed
+        };
+    }
+
+    _logConversationEntry({
+        userId,
+        username,
+        channelId,
+        channelName,
+        messageContent,
+        botResponse,
+        timestamp,
+        modelUsed,
+        tokensUsed
+    }) {
+        try {
+            logConversation({
+                botId: this.id,
+                userId,
+                username,
+                channelId,
+                channelName,
+                messageContent,
+                botResponse,
+                timestamp,
+                modelUsed,
+                tokensUsed
+            });
+        } catch (err) {
+            console.warn(`[BotManager] Failed to log conversation for "${this.name}":`, err.message);
+        }
+    }
 }
 
 class BotManager {
@@ -742,12 +852,26 @@ class BotManager {
         if (config.prefix) bot.prefix = config.prefix;
         if (Array.isArray(config.channels)) bot.channels = config.channels;
         if (Array.isArray(config.tools)) bot.tools = config.tools;
+        if (config.rateLimits !== undefined) bot.rateLimits = config.rateLimits;
         if (Number.isFinite(config.maxTokens)) bot.maxTokens = config.maxTokens;
         if (Number.isFinite(config.historyLimit)) bot.historyLimit = config.historyLimit;
         if (config.collaborationMode) bot.collaborationMode = config.collaborationMode;
         if (Number.isFinite(config.messageLogLimit)) bot.messageLogLimit = config.messageLogLimit;
 
         if (wasRunning) await bot.start();
+        return bot.getStatus();
+    }
+
+    updateBotConfig(id, config) {
+        const bot = this.bots.get(id);
+        if (!bot) throw new Error(`Bot ${id} not found`);
+
+        if (config.personality !== undefined) bot.personality = config.personality;
+        if (config.model !== undefined) bot.model = config.model;
+        if (config.triggerMode !== undefined) bot.triggerMode = config.triggerMode;
+        if (Array.isArray(config.tools)) bot.tools = config.tools;
+        if (config.rateLimits !== undefined) bot.rateLimits = config.rateLimits;
+
         return bot.getStatus();
     }
 
@@ -775,7 +899,7 @@ class BotManager {
         return bot.getConversations();
     }
 
-    notifyBotResponse({ bot, channelId, userMessage, response, isCollaborationResponse }) {
+    notifyBotResponse({ bot, channelId, userMessage, response, isCollaborationResponse, userId, username, channelName }) {
         if (isCollaborationResponse) return;
         if (!bot || !bot.userId) return;
 
@@ -789,7 +913,10 @@ class BotManager {
                 channelId,
                 originBot: bot,
                 userMessage,
-                response
+                response,
+                userId,
+                username,
+                channelName
             });
         }
     }
