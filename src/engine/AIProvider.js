@@ -35,7 +35,13 @@ async function openaiGenerate({ apiKey, model, systemPrompt, messages, maxTokens
         temperature: 0.7,
     });
 
-    return response.choices[0]?.message?.content || 'No response generated.';
+    const content = response.choices[0]?.message?.content || 'No response generated.';
+    const tokensUsed = Number.isFinite(response.usage?.total_tokens) ? response.usage.total_tokens : null;
+    return {
+        content,
+        tokensUsed,
+        modelUsed: response.model || model || 'gpt-4o-mini'
+    };
 }
 
 async function anthropicGenerate({ apiKey, model, systemPrompt, messages, maxTokens }) {
@@ -51,7 +57,17 @@ async function anthropicGenerate({ apiKey, model, systemPrompt, messages, maxTok
         }))
     });
 
-    return response.content[0]?.text || 'No response generated.';
+    const content = response.content[0]?.text || 'No response generated.';
+    const inputTokens = Number.isFinite(response.usage?.input_tokens) ? response.usage.input_tokens : null;
+    const outputTokens = Number.isFinite(response.usage?.output_tokens) ? response.usage.output_tokens : null;
+    const tokensUsed = Number.isFinite(inputTokens) && Number.isFinite(outputTokens)
+        ? inputTokens + outputTokens
+        : null;
+    return {
+        content,
+        tokensUsed,
+        modelUsed: response.model || model || 'claude-sonnet-4-20250514'
+    };
 }
 
 module.exports = { generateResponse };

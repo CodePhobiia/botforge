@@ -23,6 +23,17 @@ function ensureUserColumns(database) {
     database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id)');
 }
 
+function ensureBotColumns(database) {
+    const columns = database.prepare(`PRAGMA table_info(bots)`).all().map((row) => row.name);
+    const addColumn = (name, type) => {
+        if (!columns.includes(name)) {
+            database.exec(`ALTER TABLE bots ADD COLUMN ${name} ${type}`);
+        }
+    };
+
+    addColumn('rate_limits_json', 'TEXT');
+}
+
 function initDatabase() {
     if (db) return db;
 
@@ -59,6 +70,7 @@ function initDatabase() {
             prefix TEXT NOT NULL,
             channels_json TEXT NOT NULL,
             tools_json TEXT NOT NULL,
+            rate_limits_json TEXT,
             max_tokens INTEGER NOT NULL,
             history_limit INTEGER NOT NULL,
             created_at TEXT NOT NULL,
@@ -75,27 +87,29 @@ function initDatabase() {
             FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
         );
 
-        CREATE TABLE IF NOT EXISTS bot_analytics (
+        CREATE TABLE IF NOT EXISTS conversation_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             bot_id TEXT NOT NULL,
-            hour_start TEXT NOT NULL,
-            messages_sent INTEGER NOT NULL DEFAULT 0,
-            messages_received INTEGER NOT NULL DEFAULT 0,
-            commands_used TEXT NOT NULL DEFAULT '{}',
-            errors INTEGER NOT NULL DEFAULT 0,
-            uptime_ms INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
+            user_id TEXT,
+            username TEXT,
+            channel_id TEXT,
+            channel_name TEXT,
+            message_content TEXT,
+            bot_response TEXT,
+            timestamp TEXT NOT NULL,
+            model_used TEXT,
+            tokens_used INTEGER,
             FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
         );
 
         CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id);
         CREATE INDEX IF NOT EXISTS idx_bot_logs_bot_id ON bot_logs(bot_id);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_bot_analytics_bot_hour ON bot_analytics(bot_id, hour_start);
-        CREATE INDEX IF NOT EXISTS idx_bot_analytics_bot_id ON bot_analytics(bot_id);
+        CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_id ON conversation_logs(bot_id);
+        CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_time ON conversation_logs(bot_id, timestamp);
     `);
 
     ensureUserColumns(db);
+    ensureBotColumns(db);
 
     return db;
 }
@@ -122,12 +136,12 @@ const statements = {
         INSERT INTO bots (
             id, user_id, name, discord_token_encrypted, ai_provider,
             ai_api_key_encrypted, model, personality, trigger_mode, prefix,
-            channels_json, tools_json, max_tokens, history_limit,
+            channels_json, tools_json, rate_limits_json, max_tokens, history_limit,
             created_at, updated_at
         ) VALUES (
             @id, @user_id, @name, @discord_token_encrypted, @ai_provider,
             @ai_api_key_encrypted, @model, @personality, @trigger_mode, @prefix,
-            @channels_json, @tools_json, @max_tokens, @history_limit,
+            @channels_json, @tools_json, @rate_limits_json, @max_tokens, @history_limit,
             @created_at, @updated_at
         )
     `),
@@ -143,6 +157,7 @@ const statements = {
             prefix = @prefix,
             channels_json = @channels_json,
             tools_json = @tools_json,
+            rate_limits_json = @rate_limits_json,
             max_tokens = @max_tokens,
             history_limit = @history_limit,
             updated_at = @updated_at
@@ -162,34 +177,36 @@ const statements = {
         ORDER BY created_at DESC, id DESC
         LIMIT 1
     `),
-    getAnalyticsRow: database.prepare(`
-        SELECT * FROM bot_analytics
-        WHERE bot_id = ? AND hour_start = ?
-        LIMIT 1
-    `),
-    insertAnalyticsRow: database.prepare(`
-        INSERT INTO bot_analytics (
-            bot_id, hour_start, messages_sent, messages_received,
-            commands_used, errors, uptime_ms, created_at, updated_at
+    insertConversationLog: database.prepare(`
+        INSERT INTO conversation_logs (
+            bot_id, user_id, username, channel_id, channel_name,
+            message_content, bot_response, timestamp, model_used, tokens_used
         ) VALUES (
-            @bot_id, @hour_start, @messages_sent, @messages_received,
-            @commands_used, @errors, @uptime_ms, @created_at, @updated_at
+            @bot_id, @user_id, @username, @channel_id, @channel_name,
+            @message_content, @bot_response, @timestamp, @model_used, @tokens_used
         )
     `),
-    updateAnalyticsRow: database.prepare(`
-        UPDATE bot_analytics SET
-            messages_sent = @messages_sent,
-            messages_received = @messages_received,
-            commands_used = @commands_used,
-            errors = @errors,
-            uptime_ms = @uptime_ms,
-            updated_at = @updated_at
-        WHERE bot_id = @bot_id AND hour_start = @hour_start
+    getConversationsByBot: database.prepare(`
+        SELECT * FROM conversation_logs
+        WHERE bot_id = ?
+        ORDER BY timestamp DESC, id DESC
+        LIMIT ? OFFSET ?
     `),
-    listAnalyticsRange: database.prepare(`
-        SELECT * FROM bot_analytics
-        WHERE bot_id = ? AND hour_start >= ?
-        ORDER BY hour_start ASC
+    searchConversationsByBot: database.prepare(`
+        SELECT * FROM conversation_logs
+        WHERE bot_id = @bot_id AND (
+            message_content LIKE @pattern OR
+            bot_response LIKE @pattern OR
+            username LIKE @pattern OR
+            channel_name LIKE @pattern
+        )
+        ORDER BY timestamp DESC, id DESC
+        LIMIT 200
+    `),
+    getAllConversationsByBot: database.prepare(`
+        SELECT * FROM conversation_logs
+        WHERE bot_id = ?
+        ORDER BY timestamp ASC, id ASC
     `)
 };
 
@@ -199,12 +216,6 @@ function toIso(value) {
     return new Date(value).toISOString();
 }
 
-function toHourStart(value) {
-    const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || Date.now());
-    date.setMinutes(0, 0, 0);
-    return date.toISOString();
-}
-
 function safeJsonParse(value, fallback) {
     if (value === null || value === undefined) return fallback;
     try {
@@ -212,19 +223,6 @@ function safeJsonParse(value, fallback) {
     } catch {
         return fallback;
     }
-}
-
-function mergeCommandCounts(current, additions) {
-    const merged = { ...(current || {}) };
-    if (!additions) return merged;
-    for (const [key, count] of Object.entries(additions)) {
-        if (!key) continue;
-        const normalized = key.toString().toLowerCase();
-        const increment = Number.isFinite(count) ? count : 0;
-        if (increment === 0) continue;
-        merged[normalized] = (merged[normalized] || 0) + increment;
-    }
-    return merged;
 }
 
 function mapUserRow(row) {
@@ -256,10 +254,28 @@ function mapBotRow(row) {
         prefix: row.prefix,
         channels: safeJsonParse(row.channels_json, []),
         tools: safeJsonParse(row.tools_json, []),
+        rateLimits: safeJsonParse(row.rate_limits_json, null),
         maxTokens: row.max_tokens,
         historyLimit: row.history_limit,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at)
+    };
+}
+
+function mapConversationRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        botId: row.bot_id,
+        userId: row.user_id,
+        username: row.username,
+        channelId: row.channel_id,
+        channelName: row.channel_name,
+        messageContent: row.message_content,
+        botResponse: row.bot_response,
+        timestamp: row.timestamp,
+        modelUsed: row.model_used,
+        tokensUsed: row.tokens_used
     };
 }
 
@@ -340,6 +356,7 @@ function createBot(config) {
         prefix: config.prefix,
         channels_json: JSON.stringify(channelsValue),
         tools_json: JSON.stringify(toolsValue),
+        rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         created_at: createdAt,
@@ -384,6 +401,7 @@ function updateBot(userId, botId, updates) {
     if (hasProp('prefix')) config.prefix = updates.prefix;
     if (hasProp('channels')) config.channels = updates.channels;
     if (hasProp('tools')) config.tools = updates.tools;
+    if (hasProp('rateLimits')) config.rateLimits = updates.rateLimits;
     if (hasProp('maxTokens')) config.maxTokens = updates.maxTokens;
     if (hasProp('historyLimit')) config.historyLimit = updates.historyLimit;
 
@@ -405,6 +423,7 @@ function updateBot(userId, botId, updates) {
         prefix: config.prefix,
         channels_json: JSON.stringify(channelsValue),
         tools_json: JSON.stringify(toolsValue),
+        rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         max_tokens: config.maxTokens ?? 1024,
         history_limit: config.historyLimit ?? 20,
         updated_at: updatedAt.toISOString()
@@ -439,177 +458,47 @@ function getLatestBotStatusEvent(botId) {
     };
 }
 
-const applyAnalyticsUpdate = database.transaction((botId, hourStart, updates) => {
-    if (!botId || !hourStart) return;
-    const row = statements.getAnalyticsRow.get(botId, hourStart);
-    const nowIso = new Date().toISOString();
-    const deltaSent = Number.isFinite(updates.messagesSent) ? updates.messagesSent : 0;
-    const deltaReceived = Number.isFinite(updates.messagesReceived) ? updates.messagesReceived : 0;
-    const deltaErrors = Number.isFinite(updates.errors) ? updates.errors : 0;
-    const deltaUptime = Number.isFinite(updates.uptimeMs) ? updates.uptimeMs : 0;
-    const commandUpdates = updates.commandsUsed || null;
-
-    if (row) {
-        const mergedCommands = mergeCommandCounts(safeJsonParse(row.commands_used, {}), commandUpdates);
-        statements.updateAnalyticsRow.run({
-            bot_id: botId,
-            hour_start: hourStart,
-            messages_sent: (row.messages_sent || 0) + deltaSent,
-            messages_received: (row.messages_received || 0) + deltaReceived,
-            commands_used: JSON.stringify(mergedCommands),
-            errors: (row.errors || 0) + deltaErrors,
-            uptime_ms: (row.uptime_ms || 0) + deltaUptime,
-            updated_at: nowIso
-        });
-        return;
-    }
-
-    const initialCommands = mergeCommandCounts({}, commandUpdates);
-    statements.insertAnalyticsRow.run({
+function logConversation({
+    botId,
+    userId = null,
+    username = null,
+    channelId = null,
+    channelName = null,
+    messageContent = null,
+    botResponse = null,
+    timestamp = null,
+    modelUsed = null,
+    tokensUsed = null
+}) {
+    const stamped = timestamp ? toIso(timestamp) : new Date().toISOString();
+    statements.insertConversationLog.run({
         bot_id: botId,
-        hour_start: hourStart,
-        messages_sent: deltaSent,
-        messages_received: deltaReceived,
-        commands_used: JSON.stringify(initialCommands),
-        errors: deltaErrors,
-        uptime_ms: deltaUptime,
-        created_at: nowIso,
-        updated_at: nowIso
+        user_id: userId,
+        username,
+        channel_id: channelId,
+        channel_name: channelName,
+        message_content: messageContent,
+        bot_response: botResponse,
+        timestamp: stamped,
+        model_used: modelUsed,
+        tokens_used: Number.isFinite(tokensUsed) ? tokensUsed : null
     });
-});
-
-function recordBotMessageReceived(botId, commandName, timestamp) {
-    if (!botId) return;
-    const hourStart = toHourStart(timestamp);
-    const commands = commandName ? { [commandName]: 1 } : null;
-    applyAnalyticsUpdate(botId, hourStart, { messagesReceived: 1, commandsUsed: commands });
 }
 
-function recordBotMessageSent(botId, count = 1, timestamp) {
-    if (!botId) return;
-    const safeCount = Number.isFinite(count) ? count : 0;
-    if (safeCount <= 0) return;
-    const hourStart = toHourStart(timestamp);
-    applyAnalyticsUpdate(botId, hourStart, { messagesSent: safeCount });
+function getConversationsByBot(botId, limit = 50, offset = 0) {
+    const rows = statements.getConversationsByBot.all(botId, limit, offset);
+    return rows.map(mapConversationRow);
 }
 
-function recordBotError(botId, timestamp) {
-    if (!botId) return;
-    const hourStart = toHourStart(timestamp);
-    applyAnalyticsUpdate(botId, hourStart, { errors: 1 });
+function searchConversations(botId, query) {
+    const pattern = `%${query}%`;
+    const rows = statements.searchConversationsByBot.all({ bot_id: botId, pattern });
+    return rows.map(mapConversationRow);
 }
 
-function recordBotUptime(botId, startAt, endAt) {
-    if (!botId || !startAt) return;
-    const start = startAt instanceof Date ? new Date(startAt.getTime()) : new Date(startAt);
-    const end = endAt ? (endAt instanceof Date ? new Date(endAt.getTime()) : new Date(endAt)) : new Date();
-    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return;
-    if (end <= start) return;
-
-    let cursor = new Date(start.getTime());
-    while (cursor < end) {
-        const hourStartDate = new Date(cursor.getTime());
-        hourStartDate.setMinutes(0, 0, 0);
-        const hourEnd = new Date(hourStartDate.getTime());
-        hourEnd.setHours(hourEnd.getHours() + 1);
-
-        const segmentEnd = end < hourEnd ? end : hourEnd;
-        const durationMs = Math.max(0, segmentEnd - cursor);
-        if (durationMs > 0) {
-            applyAnalyticsUpdate(botId, hourStartDate.toISOString(), { uptimeMs: durationMs });
-        }
-        cursor = segmentEnd;
-    }
-}
-
-function getBotAnalytics(botId, rangeHours = 24) {
-    if (!botId) return null;
-    const hours = Number.isFinite(rangeHours) && rangeHours > 0 ? Math.round(rangeHours) : 24;
-    const now = new Date();
-    const endHour = new Date(now.getTime());
-    endHour.setMinutes(0, 0, 0);
-    const startHour = new Date(endHour.getTime() - (hours - 1) * 60 * 60 * 1000);
-    const rows = statements.listAnalyticsRange.all(botId, startHour.toISOString());
-    const rowMap = new Map();
-    rows.forEach(row => {
-        rowMap.set(row.hour_start, row);
-    });
-
-    const labels = [];
-    const messagesSent = [];
-    const messagesReceived = [];
-    const errors = [];
-    const uptimeMs = [];
-
-    let totalSent = 0;
-    let totalReceived = 0;
-    let totalErrors = 0;
-    let totalUptime = 0;
-    const commandTotals = {};
-
-    for (let i = 0; i < hours; i++) {
-        const hour = new Date(startHour.getTime() + i * 60 * 60 * 1000);
-        const hourKey = hour.toISOString();
-        const row = rowMap.get(hourKey);
-        const sent = row ? row.messages_sent || 0 : 0;
-        const received = row ? row.messages_received || 0 : 0;
-        const errorCount = row ? row.errors || 0 : 0;
-        const uptime = row ? row.uptime_ms || 0 : 0;
-
-        labels.push(hourKey);
-        messagesSent.push(sent);
-        messagesReceived.push(received);
-        errors.push(errorCount);
-        uptimeMs.push(uptime);
-
-        totalSent += sent;
-        totalReceived += received;
-        totalErrors += errorCount;
-        totalUptime += uptime;
-
-        if (row && row.commands_used) {
-            const parsed = safeJsonParse(row.commands_used, {});
-            for (const [cmd, count] of Object.entries(parsed)) {
-                if (!cmd) continue;
-                const normalized = cmd.toString().toLowerCase();
-                commandTotals[normalized] = (commandTotals[normalized] || 0) + (Number.isFinite(count) ? count : 0);
-            }
-        }
-    }
-
-    const topCommands = Object.entries(commandTotals)
-        .map(([command, count]) => ({ command, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
-
-    const rangeMs = hours * 60 * 60 * 1000;
-    const uptimePct = rangeMs > 0 ? Math.min(100, (totalUptime / rangeMs) * 100) : 0;
-    const totalMessages = totalSent + totalReceived;
-    const errorRate = totalMessages > 0 ? (totalErrors / totalMessages) * 100 : 0;
-
-    return {
-        range: {
-            hours,
-            start: startHour.toISOString(),
-            end: new Date(endHour.getTime() + 60 * 60 * 1000).toISOString()
-        },
-        totals: {
-            messagesSent: totalSent,
-            messagesReceived: totalReceived,
-            errors: totalErrors,
-            uptimeMs: totalUptime,
-            uptimePct,
-            errorRate
-        },
-        topCommands,
-        series: {
-            labels,
-            messagesSent,
-            messagesReceived,
-            errors,
-            uptimeMs
-        }
-    };
+function getAllConversationsByBot(botId) {
+    const rows = statements.getAllConversationsByBot.all(botId);
+    return rows.map(mapConversationRow);
 }
 
 module.exports = {
@@ -628,9 +517,8 @@ module.exports = {
     deleteBot,
     logBotEvent,
     getLatestBotStatusEvent,
-    recordBotMessageReceived,
-    recordBotMessageSent,
-    recordBotError,
-    recordBotUptime,
-    getBotAnalytics
+    logConversation,
+    getConversationsByBot,
+    searchConversations,
+    getAllConversationsByBot
 };

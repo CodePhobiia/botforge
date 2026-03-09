@@ -25,19 +25,27 @@ class RateLimiter {
         };
     }
 
-    checkAndRecord({ userId, botId }) {
+    checkAndRecord({ userId, botId, limits } = {}) {
         const now = Date.now();
 
-        const userResult = this._checkBucket(this.userBuckets, userId, this.userLimits, now);
+        const userLimits = this._mergeLimits(this.userLimits, limits?.user);
+        const botLimits = this._mergeLimits(this.botLimits, limits?.bot);
+
+        const userResult = this._checkBucket(this.userBuckets, userId, userLimits, now);
         if (!userResult.allowed) return userResult;
 
-        const botResult = this._checkBucket(this.botBuckets, botId, this.botLimits, now);
+        const botResult = this._checkBucket(this.botBuckets, botId, botLimits, now);
         if (!botResult.allowed) return botResult;
 
         this._record(this.userBuckets, userId, now);
         this._record(this.botBuckets, botId, now);
 
         return { allowed: true };
+    }
+
+    _mergeLimits(base, overrides) {
+        if (!overrides || typeof overrides !== 'object') return base;
+        return { ...base, ...overrides };
     }
 
     _record(map, key, timestamp) {

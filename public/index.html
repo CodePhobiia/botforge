@@ -214,6 +214,40 @@
         .server-list{display:flex;flex-wrap:wrap;gap:6px}
         .server-pill{padding:4px 10px;border-radius:999px;background:#09090B;border:1px solid var(--border);font-size:11px;color:var(--light)}
         .empty-log{font-size:12px;color:var(--gray)}
+        .detail-section-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+        .conversation-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+        .conversation-search{display:flex;gap:8px;flex:1;min-width:220px}
+        .conversation-search input{flex:1;padding:8px 12px;background:#09090B;border:1px solid var(--border);border-radius:8px;color:var(--white);font-size:12px;font-family:inherit}
+        .conversation-search input:focus{outline:none;border-color:var(--accent)}
+        .conversation-actions{display:flex;gap:8px;flex-wrap:wrap}
+        .chat-log{display:flex;flex-direction:column;gap:12px;max-height:360px;overflow-y:auto;padding-right:4px}
+        .chat-item{display:flex;flex-direction:column;gap:6px;max-width:80%}
+        .chat-item.user{align-self:flex-start}
+        .chat-item.bot{align-self:flex-end;text-align:right}
+        .chat-bubble{padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.6;white-space:pre-wrap}
+        .chat-bubble.user{background:#0B0B10;border:1px solid var(--border);color:var(--light)}
+        .chat-bubble.bot{background:rgba(124,58,237,0.18);border:1px solid rgba(124,58,237,0.4);color:var(--white)}
+        .chat-meta{font-size:10px;color:var(--gray)}
+        .conversation-footer{margin-top:12px;display:flex;justify-content:center}
+
+        .config-panel{display:grid;gap:14px}
+        .config-panel textarea,.config-panel select,.config-panel input{width:100%;padding:10px 12px;background:#09090B;border:1px solid var(--border);border-radius:8px;color:var(--white);font-size:12px;font-family:inherit}
+        .config-panel textarea{min-height:90px;resize:vertical}
+        .config-panel input:focus,.config-panel textarea:focus,.config-panel select:focus{outline:none;border-color:var(--accent)}
+        .config-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .config-label{font-size:11px;font-weight:600;color:var(--light);margin-bottom:6px}
+        .toggle-group{display:flex;gap:8px;flex-wrap:wrap}
+        .toggle-pill{border:1px solid var(--border);border-radius:999px;overflow:hidden;background:#0B0B10;cursor:pointer}
+        .toggle-pill input{display:none}
+        .toggle-pill span{display:block;padding:6px 12px;font-size:11px;color:var(--light)}
+        .toggle-pill input:checked + span{background:rgba(124,58,237,0.22);color:var(--accent);box-shadow:0 0 0 1px rgba(124,58,237,0.4) inset}
+        .tool-toggle input:checked + span{background:rgba(16,185,129,0.2);color:var(--green);box-shadow:0 0 0 1px rgba(16,185,129,0.4) inset}
+        .rate-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+        .rate-group{border:1px solid var(--border);border-radius:10px;padding:10px;background:#0B0B10}
+        .rate-group label{display:block;font-size:10px;color:var(--gray);margin-bottom:4px}
+        .config-actions{display:flex;justify-content:flex-end;margin-top:8px}
+        .flash-success{animation:configFlash 0.8s ease}
+        @keyframes configFlash{0%{box-shadow:0 0 0 0 rgba(16,185,129,0.7);background:rgba(16,185,129,0.12)}100%{box-shadow:0 0 0 12px rgba(16,185,129,0);background:transparent}}
 
         .detail-analytics-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
         .analytics-range{display:flex;gap:6px}
@@ -253,6 +287,8 @@
             .onboarding-progress{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
             .settings-grid{grid-template-columns:1fr}
             .form-row{grid-template-columns:1fr}
+            .config-row{grid-template-columns:1fr}
+            .rate-grid{grid-template-columns:1fr}
         }
     </style>
 </head>
@@ -558,8 +594,98 @@
                 </div>
             </div>
             <div class="detail-section full">
-                <h4 id="detailLogsTitle">Conversation Log</h4>
-                <div class="log-list" id="detailLogs"></div>
+                <div class="detail-section-header">
+                    <h4>Conversation Logs</h4>
+                    <div class="conversation-actions">
+                        <button class="secondary-btn" onclick="exportConversations('json')">Export JSON</button>
+                        <button class="secondary-btn" onclick="exportConversations('csv')">Export CSV</button>
+                    </div>
+                </div>
+                <div class="conversation-controls">
+                    <div class="conversation-search">
+                        <input type="text" id="conversationSearch" placeholder="Search conversations..." onkeydown="if(event.key==='Enter'){searchConversationLogs()}">
+                        <button class="secondary-btn" onclick="searchConversationLogs()">Search</button>
+                        <button class="ghost-btn" onclick="clearConversationSearch()">Clear</button>
+                    </div>
+                    <div class="detail-sub" id="conversationMeta">No conversations loaded.</div>
+                </div>
+                <div class="chat-log" id="conversationLog"></div>
+                <div class="conversation-footer">
+                    <button class="secondary-btn" id="conversationLoadMore" onclick="loadMoreConversations()">Load more</button>
+                </div>
+            </div>
+            <div class="detail-section full">
+                <h4>Live Config</h4>
+                <div class="config-panel" id="configPanel">
+                    <div>
+                        <div class="config-label">Personality / System Prompt</div>
+                        <textarea id="configPersonality" placeholder="Describe how the bot should behave..."></textarea>
+                    </div>
+                    <div class="config-row">
+                        <div>
+                            <div class="config-label">Model</div>
+                            <select id="configModel"></select>
+                        </div>
+                        <div>
+                            <div class="config-label">Trigger Mode</div>
+                            <div class="toggle-group" id="configTriggerGroup">
+                                <label class="toggle-pill">
+                                    <input type="radio" name="configTrigger" value="mention">
+                                    <span>@mention</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="radio" name="configTrigger" value="all">
+                                    <span>All messages</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="radio" name="configTrigger" value="prefix">
+                                    <span>Prefix</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="config-label">Enabled Tools</div>
+                        <div class="toggle-group" id="configTools"></div>
+                    </div>
+                    <div>
+                        <div class="config-label">Rate Limits (per user)</div>
+                        <div class="rate-grid">
+                            <div class="rate-group">
+                                <label>Per minute</label>
+                                <input type="number" id="rateUserMinute" min="0" placeholder="20">
+                            </div>
+                            <div class="rate-group">
+                                <label>Per hour</label>
+                                <input type="number" id="rateUserHour" min="0" placeholder="200">
+                            </div>
+                            <div class="rate-group">
+                                <label>Per day</label>
+                                <input type="number" id="rateUserDay" min="0" placeholder="1000">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="config-label">Rate Limits (per bot)</div>
+                        <div class="rate-grid">
+                            <div class="rate-group">
+                                <label>Per minute</label>
+                                <input type="number" id="rateBotMinute" min="0" placeholder="60">
+                            </div>
+                            <div class="rate-group">
+                                <label>Per hour</label>
+                                <input type="number" id="rateBotHour" min="0" placeholder="500">
+                            </div>
+                            <div class="rate-group">
+                                <label>Per day</label>
+                                <input type="number" id="rateBotDay" min="0" placeholder="5000">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="config-actions">
+                        <button class="primary-btn" onclick="applyLiveConfig()">Apply Changes</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -587,6 +713,23 @@ let templatesLoaded = false;
 let templateFilter = 'All';
 let selectedTemplate = null;
 let onboardingStep = Number.parseInt(localStorage.getItem('bf_onboarding_step') || '0', 10) || 0;
+let activeDetailBotId = null;
+let conversationState = {
+    botId: null,
+    items: [],
+    offset: 0,
+    limit: 50,
+    query: '',
+    hasMore: true,
+    loading: false
+};
+
+const AVAILABLE_TOOLS = [
+    { name: 'web_search', label: 'Web Search' },
+    { name: 'calculator', label: 'Calculator' },
+    { name: 'current_time', label: 'Current Time' },
+    { name: 'reminder', label: 'Reminder' }
+];
 
 const onboardingSteps = [
     {
@@ -1307,22 +1450,34 @@ function closeModal() {
 function updateModelOptions() {
     const provider = document.getElementById('botProvider').value;
     const modelSelect = document.getElementById('botModel');
-    if (provider === 'openai') {
-        modelSelect.innerHTML = `
-            <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
-            <option value="gpt-4o">GPT-4o (balanced)</option>
-            <option value="gpt-4.1">GPT-4.1 (latest)</option>
-            <option value="o3-mini">o3-mini (reasoning)</option>
-        `;
-    } else {
-        modelSelect.innerHTML = `
-            <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (balanced)</option>
-            <option value="claude-haiku-3-5-20241022">Claude 3.5 Haiku (fast)</option>
-            <option value="claude-opus-4-20250514">Claude Opus 4 (powerful)</option>
-        `;
+    renderModelOptions(modelSelect, provider);
+}
+
+function renderModelOptions(selectEl, provider, selectedValue = null) {
+    if (!selectEl) return;
+    const options = provider === 'anthropic'
+        ? [
+            { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4 (balanced)' },
+            { value: 'claude-haiku-3-5-20241022', label: 'Claude 3.5 Haiku (fast)' },
+            { value: 'claude-opus-4-20250514', label: 'Claude Opus 4 (powerful)' }
+        ]
+        : [
+            { value: 'gpt-4o-mini', label: 'GPT-4o Mini (fast, cheap)' },
+            { value: 'gpt-4o', label: 'GPT-4o (balanced)' },
+            { value: 'gpt-4.1', label: 'GPT-4.1 (latest)' },
+            { value: 'o3-mini', label: 'o3-mini (reasoning)' }
+        ];
+
+    selectEl.innerHTML = options.map(option => (
+        `<option value="${option.value}">${option.label}</option>`
+    )).join('');
+
+    if (selectedValue) {
+        selectEl.value = selectedValue;
     }
-    if (modelSelect.options.length && modelSelect.selectedIndex === -1) {
-        modelSelect.selectedIndex = 0;
+
+    if (selectEl.options.length && selectEl.selectedIndex === -1) {
+        selectEl.selectedIndex = 0;
     }
 }
 
@@ -1372,13 +1527,17 @@ async function saveBot() {
 function openBotDetail(id) {
     const bot = currentBots.find(b => b.id === id);
     if (!bot) return;
+    activeDetailBotId = bot.id;
     renderBotDetail(bot);
     document.getElementById('botDetail').classList.add('show');
+    resetConversationState(bot.id);
+    loadConversationLogs({ reset: true });
 }
 
 function closeBotDetail() {
     document.getElementById('botDetail').classList.remove('show');
     currentDetailBotId = null;
+    activeDetailBotId = null;
     if (analyticsChart) {
         analyticsChart.destroy();
         analyticsChart = null;
@@ -1419,31 +1578,307 @@ function renderBotDetail(bot) {
     if (analyticsReceived) analyticsReceived.textContent = '--';
     if (analyticsCommands) analyticsCommands.innerHTML = '<span class="command-empty">Loading…</span>';
 
-    const logTitle = document.getElementById('detailLogsTitle');
-    const logs = bot.recentMessages || [];
-    const sampleLogs = logs.length === 0 ? buildSampleLogs(bot) : logs;
-    logTitle.textContent = logs.length === 0 ? 'Conversation Log (sample)' : 'Conversation Log';
-    const logEl = document.getElementById('detailLogs');
-    if (!sampleLogs.length) {
+    activeDetailBotId = bot.id;
+    resetConversationState(bot.id);
+    loadConversationLogs({ reset: true });
+    populateConfigPanel(bot);
+}
+
+// ============ CONVERSATION LOGS ============
+
+function resetConversationState(botId) {
+    conversationState.botId = botId;
+    conversationState.items = [];
+    conversationState.offset = 0;
+    conversationState.query = '';
+    conversationState.hasMore = true;
+    conversationState.loading = false;
+    const searchInput = document.getElementById('conversationSearch');
+    if (searchInput) searchInput.value = '';
+    renderConversationLogs();
+}
+
+async function loadConversationLogs({ reset = false, query = null } = {}) {
+    if (!activeDetailBotId || conversationState.loading) return;
+    if (reset) {
+        conversationState.items = [];
+        conversationState.offset = 0;
+        conversationState.hasMore = true;
+    }
+    if (query !== null) {
+        conversationState.query = query;
+    }
+
+    conversationState.loading = true;
+    renderConversationLogs();
+
+    try {
+        if (conversationState.query) {
+            const res = await fetch(`${API}/bots/${activeDetailBotId}/conversations/search?q=${encodeURIComponent(conversationState.query)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.status === 401) { logout(); conversationState.loading = false; renderConversationLogs(); return; }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Search failed');
+            conversationState.items = Array.isArray(data.conversations) ? data.conversations : [];
+            conversationState.hasMore = false;
+            conversationState.offset = conversationState.items.length;
+        } else {
+            const res = await fetch(`${API}/bots/${activeDetailBotId}/conversations?limit=${conversationState.limit}&offset=${conversationState.offset}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.status === 401) { logout(); conversationState.loading = false; renderConversationLogs(); return; }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to load conversations');
+            const conversations = Array.isArray(data.conversations) ? data.conversations : [];
+            conversationState.items = conversationState.items.concat(conversations);
+            conversationState.offset += conversations.length;
+            conversationState.hasMore = conversations.length === conversationState.limit;
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+
+    conversationState.loading = false;
+    renderConversationLogs();
+}
+
+function searchConversationLogs() {
+    const input = document.getElementById('conversationSearch');
+    const query = input ? input.value.trim() : '';
+    if (!query) {
+        clearConversationSearch();
+        return;
+    }
+    loadConversationLogs({ reset: true, query });
+}
+
+function clearConversationSearch() {
+    const input = document.getElementById('conversationSearch');
+    if (input) input.value = '';
+    loadConversationLogs({ reset: true, query: '' });
+}
+
+function loadMoreConversations() {
+    if (conversationState.loading || conversationState.query || !conversationState.hasMore) return;
+    loadConversationLogs();
+}
+
+function renderConversationLogs() {
+    const logEl = document.getElementById('conversationLog');
+    const metaEl = document.getElementById('conversationMeta');
+    const loadMoreBtn = document.getElementById('conversationLoadMore');
+    if (!logEl) return;
+
+    if (conversationState.loading && conversationState.items.length === 0) {
+        logEl.innerHTML = '<div class="empty-log">Loading conversations…</div>';
+    } else if (!conversationState.items.length) {
         logEl.innerHTML = '<div class="empty-log">No conversation history captured yet.</div>';
     } else {
-        logEl.innerHTML = sampleLogs.map(item => `
-            <div class="log-item">
-                <strong>${esc(item.role || 'user')}</strong>: ${esc(item.content || '')}
-                <div class="log-time">${esc(item.time || 'Just now')}</div>
-            </div>
-        `).join('');
+        const bot = currentBots.find(b => b.id === activeDetailBotId);
+        const botName = bot?.name || 'Bot';
+        logEl.innerHTML = conversationState.items.map(item => {
+            const timeLabel = formatTimestamp(item.timestamp);
+            const channelLabel = item.channelName ? `#${item.channelName}` : (item.channelId || 'channel');
+            const userLabel = item.username || 'User';
+            return `
+                <div class="chat-item user">
+                    <div class="chat-meta">${esc(userLabel)} • ${esc(channelLabel)} • ${esc(timeLabel)}</div>
+                    <div class="chat-bubble user">${esc(item.messageContent || '')}</div>
+                </div>
+                <div class="chat-item bot">
+                    <div class="chat-meta">${esc(botName)} • ${esc(timeLabel)}</div>
+                    <div class="chat-bubble bot">${esc(item.botResponse || '')}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    if (metaEl) {
+        if (conversationState.query) {
+            metaEl.textContent = `Search results for "${conversationState.query}" (${conversationState.items.length})`;
+        } else if (conversationState.items.length) {
+            metaEl.textContent = `${conversationState.items.length} message pairs loaded`;
+        } else {
+            metaEl.textContent = 'No conversations loaded.';
+        }
+    }
+
+    if (loadMoreBtn) {
+        const shouldShow = !conversationState.query && conversationState.hasMore && conversationState.items.length > 0;
+        loadMoreBtn.style.display = shouldShow ? 'inline-flex' : 'none';
+        loadMoreBtn.disabled = conversationState.loading;
     }
 }
 
-function buildSampleLogs(bot) {
-    if (!bot.messageCount) return [];
-    return [
-        { role: 'user', content: `Hey ${bot.name || 'there'}, can you help draft a response?`, time: '5m ago' },
-        { role: 'bot', content: 'Absolutely. I can draft a concise, friendly reply in seconds.', time: '4m ago' },
-        { role: 'user', content: 'Summarize the last discussion thread.', time: '2m ago' },
-        { role: 'bot', content: 'Here is a quick summary with key action items.', time: '1m ago' }
+function formatTimestamp(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString();
+}
+
+async function exportConversations(format) {
+    if (!activeDetailBotId) return;
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/conversations/export?format=${format}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Export failed');
+        }
+        let blob;
+        if (format === 'json') {
+            const data = await res.json();
+            blob = new Blob([JSON.stringify(data.conversations || [], null, 2)], { type: 'application/json' });
+        } else {
+            const text = await res.text();
+            blob = new Blob([text], { type: 'text/csv' });
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `bot-${activeDetailBotId}-conversations.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        showToast(`Exported ${format.toUpperCase()} ✅`);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+// ============ LIVE CONFIG ============
+
+function populateConfigPanel(bot) {
+    if (!bot) return;
+    const personality = document.getElementById('configPersonality');
+    if (personality) personality.value = bot.personality || '';
+
+    updateConfigModelOptions(bot.aiProvider || 'openai', bot.model);
+
+    const triggerValue = bot.triggerMode || 'mention';
+    document.querySelectorAll('input[name="configTrigger"]').forEach(input => {
+        input.checked = input.value === triggerValue;
+    });
+
+    renderToolToggles(Array.isArray(bot.tools) ? bot.tools : []);
+
+    const rateLimits = bot.rateLimits || {};
+    const userLimits = rateLimits.user || {};
+    const botLimits = rateLimits.bot || {};
+    const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = Number.isFinite(value) ? value : '';
+    };
+    setValue('rateUserMinute', userLimits.perMinute);
+    setValue('rateUserHour', userLimits.perHour);
+    setValue('rateUserDay', userLimits.perDay);
+    setValue('rateBotMinute', botLimits.perMinute);
+    setValue('rateBotHour', botLimits.perHour);
+    setValue('rateBotDay', botLimits.perDay);
+}
+
+function updateConfigModelOptions(provider, selectedValue) {
+    const modelSelect = document.getElementById('configModel');
+    renderModelOptions(modelSelect, provider, selectedValue);
+}
+
+function renderToolToggles(selectedTools) {
+    const container = document.getElementById('configTools');
+    if (!container) return;
+    container.innerHTML = AVAILABLE_TOOLS.map(tool => `
+        <label class="toggle-pill tool-toggle">
+            <input type="checkbox" value="${tool.name}" ${selectedTools.includes(tool.name) ? 'checked' : ''}>
+            <span>${tool.label}</span>
+        </label>
+    `).join('');
+}
+
+function parseLimitInput(id) {
+    const el = document.getElementById(id);
+    if (!el) return undefined;
+    const raw = String(el.value || '').trim();
+    if (!raw) return undefined;
+    const value = Number.parseInt(raw, 10);
+    if (Number.isNaN(value) || value < 0) return null;
+    return value;
+}
+
+function buildRateLimitsPayload() {
+    const mapping = [
+        ['rateUserMinute', 'user', 'perMinute'],
+        ['rateUserHour', 'user', 'perHour'],
+        ['rateUserDay', 'user', 'perDay'],
+        ['rateBotMinute', 'bot', 'perMinute'],
+        ['rateBotHour', 'bot', 'perHour'],
+        ['rateBotDay', 'bot', 'perDay']
     ];
+
+    const payload = {};
+    let hasValue = false;
+
+    for (const [id, section, key] of mapping) {
+        const value = parseLimitInput(id);
+        if (value === null) {
+            showToast('Rate limits must be non-negative numbers', 'error');
+            return null;
+        }
+        if (value !== undefined) {
+            if (!payload[section]) payload[section] = {};
+            payload[section][key] = value;
+            hasValue = true;
+        }
+    }
+
+    return hasValue ? payload : undefined;
+}
+
+async function applyLiveConfig() {
+    if (!activeDetailBotId) return;
+    const personality = document.getElementById('configPersonality')?.value || '';
+    const model = document.getElementById('configModel')?.value || '';
+    const triggerMode = document.querySelector('input[name="configTrigger"]:checked')?.value || 'mention';
+    const tools = Array.from(document.querySelectorAll('#configTools input[type="checkbox"]:checked'))
+        .map(input => input.value);
+
+    const rateLimits = buildRateLimitsPayload();
+    if (rateLimits === null) return;
+
+    const payload = {
+        personality,
+        model,
+        triggerMode,
+        tools
+    };
+    if (rateLimits !== undefined) payload.rateLimits = rateLimits;
+
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/config`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(payload)
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to apply config');
+        showToast('Live config applied ✅');
+        const panel = document.getElementById('configPanel');
+        if (panel) {
+            panel.classList.remove('flash-success');
+            void panel.offsetWidth;
+            panel.classList.add('flash-success');
+        }
+        await refreshBots();
+        const updated = currentBots.find(b => b.id === activeDetailBotId);
+        if (updated) renderBotDetail(updated);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
 }
 
 function generateUptimeBars(seed, status) {
