@@ -10,20 +10,34 @@ const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { BotManager } = require('../engine/BotManager');
+const {
+    createUser,
+    getUserByEmail,
+    createBot: createBotRecord,
+    listBotsByUser,
+    listAllBots,
+    getBotById,
+    updateBot: updateBotRecord,
+    deleteBot: deleteBotRecord,
+    logBotEvent,
+    getLatestBotStatusEvent
+} = require('../db/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'botforge-secret-change-me-' + uuidv4();
-
-// In-memory store for MVP (replace with Supabase later)
-const users = new Map();
-const userBots = new Map(); // userId -> [botConfigs]
 
 const botManager = new BotManager();
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../../public')));
+
+function maskBotForResponse(config, status = null) {
+    const { discordToken, aiApiKey, updatedAt, ...rest } = config;
+    const payload = status ? { ...rest, ...status } : rest;
+    return { ...payload, discordToken: '***', aiApiKey: '***' };
+}
 
 // ============ AUTH ============
 
@@ -32,12 +46,15 @@ app.post('/api/auth/register', async (req, res) => {
         const { email, password, name } = req.body;
         if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
         
-        if (users.has(email)) return res.status(400).json({ error: 'Email already registered' });
+        if (getUserByEmail(email)) return res.status(400).json({ error: 'Email already registered' });
         
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = { id: uuidv4(), email, name: name || email.split('@')[0], password: hashedPassword, createdAt: new Date() };
-        users.set(email, user);
-        userBots.set(user.id, []);
+        const user = createUser({
+            id: uuidv4(),
+            email,
+            name: name || email.split('@')[0],
+            passwordHash: hashedPassword
+        });
         
         const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: '30d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
@@ -49,10 +66,10 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const user = users.get(email);
+        const user = getUserByEmail(email);
         if (!user) return res.status(401).json({ error: 'Invalid credentials' });
         
-        const valid = await bcrypt.compare(password, user.password);
+        const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
         
         const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: '30d' });
@@ -80,13 +97,13 @@ function auth(req, res, next) {
 
 // List user's bots
 app.get('/api/bots', auth, (req, res) => {
-    const configs = userBots.get(req.userId) || [];
+    const configs = listBotsByUser(req.userId);
     const bots = configs.map(config => {
         try {
             const status = botManager.getBotStatus(config.id);
-            return { ...config, ...status, discordToken: '***', aiApiKey: '***' };
+            return maskBotForResponse(config, status);
         } catch {
-            return { ...config, status: 'stopped', discordToken: '***', aiApiKey: '***' };
+            return maskBotForResponse(config, { status: 'stopped' });
         }
     });
     res.json({ bots });
@@ -119,13 +136,12 @@ app.post('/api/bots', auth, (req, res) => {
             createdAt: new Date()
         };
 
-        const userBotList = userBots.get(req.userId) || [];
-        userBotList.push(config);
-        userBots.set(req.userId, userBotList);
+        const storedConfig = createBotRecord(config);
+        logBotEvent(config.id, 'created', 'Bot created');
 
-        botManager.createBot(config);
+        botManager.createBot(storedConfig);
 
-        res.json({ bot: { ...config, discordToken: '***', aiApiKey: '***' } });
+        res.json({ bot: maskBotForResponse(storedConfig) });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -134,12 +150,14 @@ app.post('/api/bots', auth, (req, res) => {
 // Start a bot
 app.post('/api/bots/:id/start', auth, async (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
         
         const status = await botManager.startBot(config.id);
+        logBotEvent(config.id, 'started', 'Bot started');
         res.json({ status });
     } catch (err) {
+        logBotEvent(req.params.id, 'error', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -147,12 +165,14 @@ app.post('/api/bots/:id/start', auth, async (req, res) => {
 // Stop a bot
 app.post('/api/bots/:id/stop', auth, async (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
         
         const status = await botManager.stopBot(config.id);
+        logBotEvent(config.id, 'stopped', 'Bot stopped');
         res.json({ status });
     } catch (err) {
+        logBotEvent(req.params.id, 'error', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -160,12 +180,13 @@ app.post('/api/bots/:id/stop', auth, async (req, res) => {
 // Update a bot
 app.put('/api/bots/:id', auth, async (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
         
         // Update stored config
-        const updates = req.body;
-        Object.assign(config, updates);
+        const updates = req.body || {};
+        updateBotRecord(req.userId, req.params.id, updates);
+        logBotEvent(req.params.id, 'updated', 'Bot updated');
         
         // Update running bot
         const status = await botManager.updateBot(config.id, updates);
@@ -178,12 +199,11 @@ app.put('/api/bots/:id', auth, async (req, res) => {
 // Delete a bot
 app.delete('/api/bots/:id', auth, async (req, res) => {
     try {
-        const userBotList = userBots.get(req.userId) || [];
-        const idx = userBotList.findIndex(b => b.id === req.params.id);
-        if (idx === -1) return res.status(404).json({ error: 'Bot not found' });
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
         
         await botManager.removeBot(req.params.id);
-        userBotList.splice(idx, 1);
+        deleteBotRecord(req.userId, req.params.id);
         
         res.json({ success: true });
     } catch (err) {
@@ -194,7 +214,7 @@ app.delete('/api/bots/:id', auth, async (req, res) => {
 // Get bot status
 app.get('/api/bots/:id/status', auth, (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
         
         const status = botManager.getBotStatus(config.id);
@@ -209,10 +229,28 @@ app.get('/api/stats', (req, res) => {
     res.json({ stats: botManager.getStats() });
 });
 
-// Helper
-function findUserBot(userId, botId) {
-    const userBotList = userBots.get(userId) || [];
-    return userBotList.find(b => b.id === botId);
+async function bootstrapBots() {
+    const configs = listAllBots();
+    for (const config of configs) {
+        try {
+            await botManager.createBot(config);
+        } catch (err) {
+            console.error(`[BotForge] Failed to load bot ${config.id}:`, err.message);
+        }
+    }
+
+    for (const config of configs) {
+        const lastStatus = getLatestBotStatusEvent(config.id);
+        if (lastStatus?.eventType === 'started') {
+            try {
+                await botManager.startBot(config.id);
+                logBotEvent(config.id, 'started', 'Auto-started on boot');
+            } catch (err) {
+                logBotEvent(config.id, 'error', err.message);
+                console.error(`[BotForge] Auto-start failed for ${config.id}:`, err.message);
+            }
+        }
+    }
 }
 
 // SPA fallback
@@ -222,6 +260,9 @@ app.get('/{*path}', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`\n🔥 BotForge server running on http://localhost:${PORT}\n`);
+    bootstrapBots().catch((err) => {
+        console.error('[BotForge] Failed to bootstrap bots:', err.message);
+    });
 });
 
 module.exports = app;

@@ -1,0 +1,9 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	worktree = /tmp/bf-database
+[user]
+	email = codex@local
+	name = Codex

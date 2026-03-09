@@ -1,2 +1,4 @@
 node_modules/
 .env
+.botforge-key
+data/botforge.db
