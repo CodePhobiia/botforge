@@ -4,12 +4,22 @@
  */
 
 const express = require('express');
-const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { BotManager } = require('../engine/BotManager');
+const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser } = require('../middleware/security');
+const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
+const {
+    validateRegister,
+    validateLogin,
+    validateCreateBot,
+    validateUpdateBot,
+    validateBotIdParam,
+    validateBotTools
+} = require('../middleware/validation');
+const { errorHandler } = require('../middleware/errorHandler');
 const {
     createUser,
     getUserByEmail,
@@ -29,9 +39,13 @@ const JWT_SECRET = process.env.JWT_SECRET || 'botforge-secret-change-me-' + uuid
 
 const botManager = new BotManager();
 
-app.use(cors());
-app.use(express.json());
+app.disable('x-powered-by');
+app.use(securityHeaders);
+app.use(corsMiddleware());
+app.use(jsonBodyParser);
+app.use(urlencodedBodyParser);
 app.use(express.static(path.join(__dirname, '../../public'), { index: false }));
+app.use('/api', apiRateLimiter);
 
 function maskBotForResponse(config, status = null) {
     const { discordToken, aiApiKey, updatedAt, ...rest } = config;
@@ -41,7 +55,7 @@ function maskBotForResponse(config, status = null) {
 
 // ============ AUTH ============
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authRateLimiter, validateRegister, async (req, res) => {
     try {
         const { email, password, name } = req.body;
         if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
@@ -63,7 +77,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimiter, validateLogin, async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = getUserByEmail(email);
@@ -110,7 +124,7 @@ app.get('/api/bots', auth, (req, res) => {
 });
 
 // Create a new bot
-app.post('/api/bots', auth, (req, res) => {
+app.post('/api/bots', auth, validateCreateBot, (req, res) => {
     try {
         const { name, discordToken, aiProvider, aiApiKey, model, personality, triggerMode, prefix, channels, collaborationMode, tools } = req.body;
         
@@ -149,7 +163,7 @@ app.post('/api/bots', auth, (req, res) => {
 });
 
 // Start a bot
-app.post('/api/bots/:id/start', auth, async (req, res) => {
+app.post('/api/bots/:id/start', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -164,7 +178,7 @@ app.post('/api/bots/:id/start', auth, async (req, res) => {
 });
 
 // Stop a bot
-app.post('/api/bots/:id/stop', auth, async (req, res) => {
+app.post('/api/bots/:id/stop', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -179,7 +193,7 @@ app.post('/api/bots/:id/stop', auth, async (req, res) => {
 });
 
 // Update a bot
-app.put('/api/bots/:id', auth, async (req, res) => {
+app.put('/api/bots/:id', auth, validateBotIdParam, validateUpdateBot, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -198,7 +212,7 @@ app.put('/api/bots/:id', auth, async (req, res) => {
 });
 
 // Delete a bot
-app.delete('/api/bots/:id', auth, async (req, res) => {
+app.delete('/api/bots/:id', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -213,7 +227,7 @@ app.delete('/api/bots/:id', auth, async (req, res) => {
 });
 
 // Get bot status
-app.get('/api/bots/:id/status', auth, (req, res) => {
+app.get('/api/bots/:id/status', auth, validateBotIdParam, (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -226,7 +240,7 @@ app.get('/api/bots/:id/status', auth, (req, res) => {
 });
 
 // Get bot message logs
-app.get('/api/bots/:id/logs', auth, (req, res) => {
+app.get('/api/bots/:id/logs', auth, validateBotIdParam, (req, res) => {
     try {
         const config = findUserBot(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -239,7 +253,7 @@ app.get('/api/bots/:id/logs', auth, (req, res) => {
 });
 
 // Get bot health metrics
-app.get('/api/bots/:id/health', auth, (req, res) => {
+app.get('/api/bots/:id/health', auth, validateBotIdParam, (req, res) => {
     try {
         const config = findUserBot(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -252,7 +266,7 @@ app.get('/api/bots/:id/health', auth, (req, res) => {
 });
 
 // Configure bot tools
-app.post('/api/bots/:id/tools', auth, async (req, res) => {
+app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, async (req, res) => {
     try {
         const config = findUserBot(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -271,7 +285,7 @@ app.post('/api/bots/:id/tools', auth, async (req, res) => {
 });
 
 // Get conversation history by channel
-app.get('/api/bots/:id/conversations', auth, (req, res) => {
+app.get('/api/bots/:id/conversations', auth, validateBotIdParam, (req, res) => {
     try {
         const config = findUserBot(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
@@ -324,6 +338,8 @@ app.get('/dashboard', (req, res) => {
 app.get('/dashboard/{*path}', (req, res) => {
     res.sendFile(path.join(__dirname, '../../public/index.html'));
 });
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
     console.log(`\n🔥 BotForge server running on http://localhost:${PORT}\n`);
