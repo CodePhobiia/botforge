@@ -1,59 +1,74 @@
 # PM Notes — BotForge Feature Priority
-*Updated: 2026-03-09 03:25 UTC*
+*Updated: 2026-03-09 04:20 UTC — Cycle 2*
 
-## Competitor Analysis
-Researched: BotGhost, MEE6, Carl.gg, Arcane, Sapphire, ProBot, Dyno, YAGPDB
+## What's Shipped (15 modules, 4,641 lines)
+- ✅ Core bot engine (multi-bot discord.js management)
+- ✅ Auth (email/password + Discord OAuth2)
+- ✅ SQLite database + AES-256 encryption for tokens
+- ✅ OpenAI + Anthropic AI providers
+- ✅ Tool system (web search, calc, time, reminders)
+- ✅ Rate limiter (per-user, per-bot)
+- ✅ 12+ personality presets + template gallery
+- ✅ Bot collaboration mode
+- ✅ Security middleware (validation, rate limiting, headers, error handler)
+- ✅ Landing page (dark theme, features, pricing, FAQ)
+- ✅ Dashboard (bot cards, create/start/stop/delete)
+- ✅ Onboarding wizard (5-step guide for first-time users)
+- ✅ Dockerfile + docker-compose
+- ✅ README + LICENSE
+
+## Currently Building (Wave 4)
+- 🔄 Analytics dashboard (usage tracking, charts, stats)
+- 🔄 WebSocket real-time updates (live bot status, message counts)
+
+## Competitor Research — Cycle 2 Findings
+Source: Perplexity research on Discord bot dashboards 2025-2026
 
 ### Key Insights
-1. **MEE6 charges $11.95/mo or $89.90 lifetime** — users hate the paywall but pay anyway
-2. **Sapphire is fully free** and rising fast — "free" is a massive acquisition lever
-3. **No one does AI bot HOSTING well** — BotGhost is closest but no-code only, ClawdHost is $29/mo
-4. **Market gap: "bot-in-host" packages** — people want managed AI bots, not just pre-built bots
-5. **Discord App Directory** is now the #1 discovery channel — bots listed there get massive installs
-6. **Verification required for 100+ servers** — we need to plan for this
+1. **Real-time sync is #1 request** — WebSocket for instant status/command updates (we're building this ✅)
+2. **Live config editing** — change commands/settings WITHOUT restarting the bot. This is a differentiator.
+3. **Dark SaaS UI** — modern dashboards trending hard. We have this ✅
+4. **Third-party API integrations** — Thrivebot planning this for Phase 3. We could add webhook/API integrations.
+5. **Per-guild API keys** — security for multi-server bots. Good idea for our Pro tier.
+6. **Biggest dev struggle: simplicity vs power** — YAGPDB too complex, MEE6 too simple. We need to nail the middle.
 
-### What Makes Users Pay
-- Unlimited features (free tiers are too limited)
-- Auto-moderation + raid protection
-- Custom welcome images/messages
-- Analytics and insights
-- 24/7 uptime guarantee
-- No branding / white-label
+### Competitor Pricing Reference
+| Bot/Platform | Free | Paid |
+|---|---|---|
+| MEE6 | Limited | $11.95/mo or $89.90 lifetime |
+| Carl-bot | Basic | $7.99/mo |
+| Arcane | Most features | $7/mo |
+| ProBot | Core | $5-10/mo |
+| Sapphire | Everything | Free |
+| Thrivebot | Basic | TBD |
 
-## Feature Priority (Impact × Effort)
+### Our Positioning
+BotForge is unique: we're not a bot, we're a **bot hosting platform**. Nobody else lets you deploy YOUR OWN AI bots with YOUR OWN keys through a managed dashboard. Closest is BotGhost (no-code, AWS hosting) but they don't do AI/LLM bots.
 
-### 🔴 P0 — Ship This Week (Highest Impact)
-1. **Discord OAuth Login** — Every competitor has this. Nobody wants email/password for a Discord product. Use discord.js OAuth2 flow.
-2. **Guided Onboarding Wizard** — Step-by-step: "Create bot on Discord Developer Portal → Paste token → Pick personality → Deploy". Hand-hold users through it.
-3. **Bot Templates Gallery** — Pre-built personalities with one-click deploy (Moderator, Study Buddy, Creative Writer, etc.). Users pick a template instead of writing prompts.
+## Updated Priority Queue
 
-### 🟡 P1 — Ship This Month
-4. **Conversation Logs UI** — Show what bots are saying in their servers. Users NEED visibility.
-5. **Analytics Dashboard** — Messages/day chart, response time, most active channels. Simple Chart.js graphs.
-6. **Stripe Integration** — Free: 1 bot. Pro $9/mo: 5 bots. Team $19/mo: unlimited.
-7. **Auto-Moderation Module** — Word filter, spam detection, link blocking. Every competitor has this.
+### 🔴 P0 — Next Wave (Wave 5)
+1. **Conversation Logs Viewer** — Show what bots are saying. Users NEED to see this. Simple chat-style UI in bot detail panel.
+2. **Live Config Editing** — Edit personality, model, trigger mode, tools WITHOUT stopping the bot. Hot-reload. Research says this is the #1 request.
+3. **Deploy to Railway** — Get a public URL so anyone can use BotForge. Free tier = 500 hours/month.
 
-### 🟢 P2 — Ship This Quarter
-8. **WebSocket Real-Time Updates** — Live bot status, live message feed in dashboard
-9. **Slash Command Builder** — Visual builder for custom slash commands
-10. **Welcome/Goodbye System** — Custom welcome messages + auto-role on join
-11. **Bot Scheduling** — Auto start/stop at certain times
-12. **Conversation Export** — JSON/CSV export of bot conversations
-13. **Email Alerts** — Bot went down, usage spike, errors
+### 🟡 P1 — Wave 6
+4. **Auto-Moderation Module** — Word filter, spam detection, link blocking, raid protection. Every competitor has this.
+5. **LemonSqueezy Payments** — Easier than Stripe for digital products. Free: 1 bot. Pro $9/mo: 5 bots + analytics. Team $19/mo: unlimited.
+6. **Bot Scheduling** — Auto start/stop at certain times (save API costs).
 
-### 🔵 P3 — Future
-14. **Discord App Directory Listing** — Get BotForge listed officially
-15. **Multi-language Bot Support**
-16. **Webhook Integrations** — Slack/email notifications
-17. **Admin Panel** — Platform-wide management
-18. **White-label** — Remove BotForge branding for enterprise
+### 🟢 P2 — Wave 7+
+7. **Slash Command Builder** — Visual builder for custom slash commands
+8. **Webhook Integrations** — External notifications on bot events
+9. **Unit Tests** — Critical path coverage
+10. **Admin Panel** — Platform management
+11. **White-label** — Remove branding for enterprise
 
-## Current Wave 2 Agents (Running Now)
-- README + Docker setup (kind-willow)
-- Security hardening (faint-prairie)
-
-## Next Agents to Spawn (Wave 3)
-After Wave 2 merges:
-1. **Discord OAuth Agent** — Add OAuth2 login flow
-2. **Bot Templates Gallery Agent** — Visual template picker in dashboard
-3. **Analytics Agent** — Usage charts with Chart.js
+## Build Log
+| Wave | Features | Status |
+|------|----------|--------|
+| 1 | Database, Landing Page, Advanced Features | ✅ Merged |
+| 2 | README, Docker, Security | ✅ Merged |
+| 3 | Discord OAuth, Templates Gallery, Onboarding | ✅ Merged |
+| 4 | Analytics, WebSocket | 🔄 Building |
+| 5 | Conversation Logs, Live Config, Railway Deploy | ⏳ Next |
