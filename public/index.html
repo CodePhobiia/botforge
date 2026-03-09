@@ -267,6 +267,41 @@
         .automod-log-item strong{color:var(--white)}
         .automod-log-item .log-time{font-size:10px;color:var(--gray);margin-top:4px}
         .automod-log-meta{font-size:10px;color:var(--gray)}
+        .slash-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:14px}
+        .slash-card{background:#09090B;border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:12px;min-height:220px}
+        .slash-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .slash-card-title{font-size:11px;font-weight:700;color:var(--light);text-transform:uppercase;letter-spacing:0.8px}
+        .slash-list{display:grid;gap:10px;max-height:260px;overflow-y:auto}
+        .slash-item{background:#0B0B10;border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+        .slash-item-meta{display:flex;flex-direction:column;gap:4px}
+        .slash-item-name{font-size:13px;font-weight:700;color:var(--white);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+        .slash-item-desc{font-size:11px;color:var(--gray)}
+        .slash-pill{font-size:10px;text-transform:uppercase;letter-spacing:0.7px;padding:2px 6px;border-radius:999px;border:1px solid var(--border);color:var(--light);background:#09090B}
+        .slash-pill.enabled{border-color:rgba(16,185,129,0.4);color:var(--green);background:rgba(16,185,129,0.12)}
+        .slash-pill.disabled{border-color:rgba(239,68,68,0.4);color:var(--red);background:rgba(239,68,68,0.12)}
+        .slash-item-actions{display:flex;gap:6px;flex-shrink:0}
+        .slash-item-actions .ghost-btn{padding:4px 8px;font-size:11px}
+        .slash-item-actions .danger{border-color:rgba(239,68,68,0.4);color:var(--red)}
+        .slash-item-actions .danger:hover{border-color:var(--red);color:var(--red)}
+        .slash-form{display:flex;flex-direction:column;gap:12px}
+        .slash-form-empty{font-size:12px;color:var(--gray);padding:10px;border:1px dashed var(--border);border-radius:10px;background:#0B0B10}
+        .slash-form-fields{display:none;flex-direction:column;gap:12px}
+        .slash-form.active .slash-form-fields{display:flex}
+        .slash-form.active .slash-form-empty{display:none}
+        .slash-field label{display:block;font-size:11px;font-weight:600;color:var(--light);margin-bottom:4px}
+        .slash-field input,.slash-field select,.slash-field textarea{width:100%;padding:8px 10px;background:#09090B;border:1px solid var(--border);border-radius:8px;color:var(--white);font-size:12px;font-family:inherit}
+        .slash-field textarea{min-height:70px;resize:vertical}
+        .slash-field .hint{font-size:10px;color:var(--gray);margin-top:4px}
+        .slash-options{display:grid;gap:8px}
+        .slash-option-row{display:grid;grid-template-columns:1.2fr 1fr 0.8fr auto;gap:8px;align-items:center}
+        .slash-option-row input,.slash-option-row select{width:100%;padding:6px 8px;background:#09090B;border:1px solid var(--border);border-radius:6px;color:var(--white);font-size:11px;font-family:inherit}
+        .slash-option-row label{font-size:10px;color:var(--light);display:flex;align-items:center;gap:4px}
+        .slash-option-row .icon-btn{width:26px;height:26px;border-radius:6px}
+        .slash-preview{border:1px dashed var(--border);border-radius:12px;padding:10px;background:#0B0B10;font-size:12px;color:var(--light)}
+        .slash-preview-title{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--white)}
+        .slash-preview-desc{font-size:11px;color:var(--gray);margin-top:4px}
+        .slash-preview-meta{font-size:10px;color:var(--light);margin-top:6px;text-transform:uppercase;letter-spacing:0.6px}
+        .slash-actions{display:flex;gap:8px;flex-wrap:wrap}
         .switch{position:relative;display:inline-block;width:42px;height:22px}
         .switch input{opacity:0;width:0;height:0}
         .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#27272A;transition:0.2s;border-radius:999px}
@@ -315,6 +350,8 @@
             .config-row{grid-template-columns:1fr}
             .rate-grid{grid-template-columns:1fr}
             .automod-grid{grid-template-columns:1fr}
+            .slash-grid{grid-template-columns:1fr}
+            .slash-option-row{grid-template-columns:1fr 1fr}
         }
     </style>
 </head>
@@ -640,6 +677,81 @@
                     <button class="secondary-btn" id="conversationLoadMore" onclick="loadMoreConversations()">Load more</button>
                 </div>
             </div>
+            <div class="detail-section full" id="slashCommandsSection">
+                <div class="detail-section-header">
+                    <h4>Slash Commands</h4>
+                    <div class="slash-actions">
+                        <button class="secondary-btn" onclick="syncSlashCommands()">Sync to Discord</button>
+                        <button class="primary-btn" onclick="openSlashCommandForm()">Add Command</button>
+                    </div>
+                </div>
+                <div class="slash-grid">
+                    <div class="slash-card">
+                        <div class="slash-card-header">
+                            <div class="slash-card-title">Commands</div>
+                            <button class="ghost-btn" onclick="refreshSlashCommands()">Refresh</button>
+                        </div>
+                        <div class="slash-list" id="slashCommandList"></div>
+                    </div>
+                    <div class="slash-card">
+                        <div class="slash-card-header">
+                            <div class="slash-card-title">Builder</div>
+                            <div class="slash-pill" id="slashFormBadge">New</div>
+                        </div>
+                        <div class="slash-form" id="slashCommandForm">
+                            <div class="slash-form-empty">Select a command to edit or click Add Command.</div>
+                            <div class="slash-form-fields">
+                                <div class="slash-field">
+                                    <label>Command name</label>
+                                    <input type="text" id="slashName" placeholder="hello" oninput="normalizeSlashNameInput(); updateSlashPreview()">
+                                    <div class="hint">Lowercase, no spaces. Example: hello</div>
+                                </div>
+                                <div class="slash-field">
+                                    <label>Description</label>
+                                    <input type="text" id="slashDescription" placeholder="Sends a greeting" oninput="updateSlashPreview()">
+                                </div>
+                                <div class="slash-field">
+                                    <label>Response type</label>
+                                    <select id="slashType" onchange="updateSlashPreview()">
+                                        <option value="text">Text</option>
+                                        <option value="ai">AI</option>
+                                        <option value="embed">Embed</option>
+                                    </select>
+                                </div>
+                                <div class="slash-field">
+                                    <label>Response template</label>
+                                    <textarea id="slashTemplate" placeholder="Hello {user}! You're in {channel}." oninput="updateSlashPreview()"></textarea>
+                                    <div class="hint">Use placeholders like {user}, {channel}, {guild}, or {option:topic}.</div>
+                                </div>
+                                <div class="slash-field">
+                                    <label>Options</label>
+                                    <div class="slash-options" id="slashOptions"></div>
+                                    <button class="secondary-btn" type="button" onclick="addSlashOptionRow()">Add option</button>
+                                </div>
+                                <div class="slash-field">
+                                    <label>Enabled</label>
+                                    <label class="switch">
+                                        <input type="checkbox" id="slashEnabled" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="slash-field">
+                                    <label>Preview</label>
+                                    <div class="slash-preview" id="slashCommandPreview">
+                                        <div class="slash-preview-title">/command</div>
+                                        <div class="slash-preview-desc">No description yet.</div>
+                                        <div class="slash-preview-meta">Response: text</div>
+                                    </div>
+                                </div>
+                                <div class="slash-actions">
+                                    <button class="secondary-btn" type="button" onclick="closeSlashCommandForm()">Cancel</button>
+                                    <button class="primary-btn" type="button" onclick="saveSlashCommand()">Save Command</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="detail-section full">
                 <h4>Live Config</h4>
                 <div class="config-panel" id="configPanel">
@@ -943,6 +1055,12 @@ let automodState = {
     limit: 25,
     loading: false
 };
+let slashCommandState = {
+    botId: null,
+    commands: [],
+    loading: false,
+    editingId: null
+};
 
 const DEFAULT_AUTOMOD_CONFIG = {
     defaultAction: 'warn',
@@ -958,6 +1076,16 @@ const AVAILABLE_TOOLS = [
     { name: 'calculator', label: 'Calculator' },
     { name: 'current_time', label: 'Current Time' },
     { name: 'reminder', label: 'Reminder' }
+];
+
+const SLASH_NAME_REGEX = /^[a-z0-9_-]{1,32}$/;
+const SLASH_OPTION_TYPES = [
+    { value: 'string', label: 'String' },
+    { value: 'integer', label: 'Integer' },
+    { value: 'boolean', label: 'Boolean' },
+    { value: 'user', label: 'User' },
+    { value: 'channel', label: 'Channel' },
+    { value: 'role', label: 'Role' }
 ];
 
 const onboardingSteps = [
@@ -1784,6 +1912,7 @@ function closeBotDetail() {
     activeDetailBotId = null;
     resetScheduleState(null);
     resetAutomodState(null);
+    resetSlashCommandState(null);
     if (analyticsChart) {
         analyticsChart.destroy();
         analyticsChart = null;
@@ -1833,6 +1962,8 @@ function renderBotDetail(bot) {
     resetAutomodState(bot.id);
     loadAutomodConfig(bot.id);
     loadAutomodLogs({ reset: true });
+    resetSlashCommandState(bot.id);
+    loadSlashCommands(bot.id);
 }
 
 // ============ CONVERSATION LOGS ============
@@ -1997,6 +2128,315 @@ async function exportConversations(format) {
         link.remove();
         URL.revokeObjectURL(url);
         showToast(`Exported ${format.toUpperCase()} ✅`);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+// ============ SLASH COMMANDS ============
+
+function resetSlashCommandState(botId) {
+    slashCommandState.botId = botId;
+    slashCommandState.commands = [];
+    slashCommandState.loading = false;
+    slashCommandState.editingId = null;
+    renderSlashCommandList();
+    closeSlashCommandForm();
+}
+
+async function loadSlashCommands(botId) {
+    if (!botId) return;
+    slashCommandState.loading = true;
+    renderSlashCommandList();
+
+    try {
+        const res = await fetch(`${API}/bots/${botId}/commands`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load slash commands');
+        slashCommandState.commands = Array.isArray(data.commands) ? data.commands : [];
+    } catch (err) {
+        console.error('Failed to load slash commands:', err);
+        showToast('Error: ' + err.message, 'error');
+    }
+
+    slashCommandState.loading = false;
+    renderSlashCommandList();
+}
+
+function refreshSlashCommands() {
+    if (!activeDetailBotId) return;
+    loadSlashCommands(activeDetailBotId);
+}
+
+function renderSlashCommandList() {
+    const listEl = document.getElementById('slashCommandList');
+    if (!listEl) return;
+
+    if (slashCommandState.loading && slashCommandState.commands.length === 0) {
+        listEl.innerHTML = '<div class="empty-log">Loading commands…</div>';
+        return;
+    }
+
+    if (!slashCommandState.commands.length) {
+        listEl.innerHTML = '<div class="empty-log">No slash commands yet.</div>';
+        return;
+    }
+
+    listEl.innerHTML = slashCommandState.commands.map(cmd => {
+        const typeLabel = (cmd.type || 'text').toUpperCase();
+        const isEnabled = cmd.enabled !== false;
+        const enabledClass = isEnabled ? 'enabled' : 'disabled';
+        const enabledLabel = isEnabled ? 'Enabled' : 'Disabled';
+        return `
+            <div class="slash-item">
+                <div class="slash-item-meta">
+                    <div class="slash-item-name">/${esc(cmd.name || 'command')}
+                        <span class="slash-pill">${esc(typeLabel)}</span>
+                        <span class="slash-pill ${enabledClass}">${enabledLabel}</span>
+                    </div>
+                    <div class="slash-item-desc">${esc(cmd.description || 'No description')}</div>
+                </div>
+                <div class="slash-item-actions">
+                    <button class="ghost-btn" onclick="editSlashCommand('${cmd.id}')">Edit</button>
+                    <button class="ghost-btn danger" onclick="deleteSlashCommand('${cmd.id}', '${esc(cmd.name || 'command')}')">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function setSlashFormActive(active) {
+    const form = document.getElementById('slashCommandForm');
+    if (!form) return;
+    form.classList.toggle('active', Boolean(active));
+}
+
+function normalizeSlashNameInput() {
+    const input = document.getElementById('slashName');
+    if (!input) return '';
+    input.value = input.value.toLowerCase().replace(/\s+/g, '-');
+    return input.value.trim();
+}
+
+function normalizeSlashOptionName(input) {
+    if (!input) return;
+    input.value = input.value.toLowerCase().replace(/\s+/g, '-');
+}
+
+function addSlashOptionRow(option = {}) {
+    const container = document.getElementById('slashOptions');
+    if (!container) return;
+    const row = document.createElement('div');
+    row.className = 'slash-option-row';
+    row.innerHTML = `
+        <input type="text" class="slash-option-name" placeholder="topic" value="${esc(option.name || '')}" oninput="normalizeSlashOptionName(this); updateSlashPreview()">
+        <select class="slash-option-type" onchange="updateSlashPreview()">
+            ${SLASH_OPTION_TYPES.map(item => `<option value="${item.value}">${item.label}</option>`).join('')}
+        </select>
+        <label><input type="checkbox" class="slash-option-required" ${option.required ? 'checked' : ''}>required</label>
+        <button class="icon-btn" type="button" onclick="removeSlashOptionRow(this)">×</button>
+    `;
+    container.appendChild(row);
+    const select = row.querySelector('.slash-option-type');
+    if (select) select.value = option.type || 'string';
+    updateSlashPreview();
+}
+
+function removeSlashOptionRow(button) {
+    const row = button?.closest('.slash-option-row');
+    if (row) row.remove();
+    updateSlashPreview();
+}
+
+function openSlashCommandForm(command = null) {
+    const badge = document.getElementById('slashFormBadge');
+    const nameInput = document.getElementById('slashName');
+    const descInput = document.getElementById('slashDescription');
+    const typeSelect = document.getElementById('slashType');
+    const templateInput = document.getElementById('slashTemplate');
+    const enabledInput = document.getElementById('slashEnabled');
+    const optionsEl = document.getElementById('slashOptions');
+
+    if (!nameInput || !descInput || !typeSelect || !templateInput || !enabledInput || !optionsEl) return;
+
+    optionsEl.innerHTML = '';
+
+    if (command) {
+        slashCommandState.editingId = command.id;
+        nameInput.value = command.name || '';
+        descInput.value = command.description || '';
+        typeSelect.value = command.type || 'text';
+        templateInput.value = command.responseTemplate || '';
+        enabledInput.checked = command.enabled !== false;
+        if (Array.isArray(command.options) && command.options.length) {
+            command.options.forEach(opt => addSlashOptionRow(opt));
+        }
+        if (badge) badge.textContent = 'Editing';
+    } else {
+        slashCommandState.editingId = null;
+        nameInput.value = '';
+        descInput.value = '';
+        typeSelect.value = 'text';
+        templateInput.value = '';
+        enabledInput.checked = true;
+        if (badge) badge.textContent = 'New';
+    }
+
+    setSlashFormActive(true);
+    updateSlashPreview();
+}
+
+function closeSlashCommandForm() {
+    slashCommandState.editingId = null;
+    const optionsEl = document.getElementById('slashOptions');
+    if (optionsEl) optionsEl.innerHTML = '';
+    const badge = document.getElementById('slashFormBadge');
+    if (badge) badge.textContent = 'New';
+    setSlashFormActive(false);
+    updateSlashPreview();
+}
+
+function buildSlashOptionPayload({ silent = false } = {}) {
+    const rows = Array.from(document.querySelectorAll('#slashOptions .slash-option-row'));
+    const seen = new Set();
+    const options = [];
+
+    for (const row of rows) {
+        const nameInput = row.querySelector('.slash-option-name');
+        const typeSelect = row.querySelector('.slash-option-type');
+        const requiredInput = row.querySelector('.slash-option-required');
+        const name = (nameInput?.value || '').trim().toLowerCase();
+        if (!name) continue;
+        if (!SLASH_NAME_REGEX.test(name)) {
+            if (!silent) {
+                showToast('Option names must be lowercase and contain only letters, numbers, underscores, or dashes', 'error');
+            }
+            return null;
+        }
+        if (seen.has(name)) {
+            if (!silent) {
+                showToast(`Duplicate option name: ${name}`, 'error');
+            }
+            return null;
+        }
+        seen.add(name);
+        options.push({
+            name,
+            type: typeSelect?.value || 'string',
+            required: Boolean(requiredInput?.checked)
+        });
+    }
+
+    return options;
+}
+
+function updateSlashPreview() {
+    const preview = document.getElementById('slashCommandPreview');
+    if (!preview) return;
+    const name = (document.getElementById('slashName')?.value || 'command').trim().toLowerCase();
+    const desc = (document.getElementById('slashDescription')?.value || '').trim();
+    const type = (document.getElementById('slashType')?.value || 'text').trim();
+    const options = buildSlashOptionPayload({ silent: true }) || [];
+    const optionTokens = options.map(opt => opt.required ? `<${opt.name}:${opt.type}>` : `[${opt.name}:${opt.type}]`).join(' ');
+    const commandLine = `/${name || 'command'}${optionTokens ? ' ' + optionTokens : ''}`;
+
+    preview.innerHTML = `
+        <div class="slash-preview-title">${esc(commandLine)}</div>
+        <div class="slash-preview-desc">${esc(desc || 'No description yet.')}</div>
+        <div class="slash-preview-meta">Response: ${esc(type)}</div>
+    `;
+}
+
+async function saveSlashCommand() {
+    if (!activeDetailBotId) return;
+    const nameInput = document.getElementById('slashName');
+    const descInput = document.getElementById('slashDescription');
+    const typeSelect = document.getElementById('slashType');
+    const templateInput = document.getElementById('slashTemplate');
+    const enabledInput = document.getElementById('slashEnabled');
+
+    const name = normalizeSlashNameInput() || (nameInput?.value || '').trim().toLowerCase();
+    const description = (descInput?.value || '').trim();
+    const type = typeSelect?.value || 'text';
+    const responseTemplate = templateInput?.value || '';
+    const enabled = Boolean(enabledInput?.checked);
+
+    if (!name || !SLASH_NAME_REGEX.test(name)) {
+        showToast('Command name must be lowercase and contain only letters, numbers, underscores, or dashes', 'error');
+        return;
+    }
+    if (!description || description.length > 100) {
+        showToast('Description must be 1-100 characters', 'error');
+        return;
+    }
+
+    const options = buildSlashOptionPayload();
+    if (options === null) return;
+
+    const payload = { name, description, type, responseTemplate, options, enabled };
+    const isEdit = Boolean(slashCommandState.editingId);
+    const url = isEdit
+        ? `${API}/bots/${activeDetailBotId}/commands/${slashCommandState.editingId}`
+        : `${API}/bots/${activeDetailBotId}/commands`;
+
+    try {
+        const res = await fetch(url, {
+            method: isEdit ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(payload)
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save command');
+        showToast(isEdit ? 'Command updated ✅' : 'Command created ✅');
+        closeSlashCommandForm();
+        await loadSlashCommands(activeDetailBotId);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+function editSlashCommand(id) {
+    const command = slashCommandState.commands.find(cmd => cmd.id === id);
+    if (!command) {
+        showToast('Command not found', 'error');
+        return;
+    }
+    openSlashCommandForm(command);
+}
+
+async function deleteSlashCommand(id, name) {
+    if (!activeDetailBotId) return;
+    if (!confirm(`Delete command \"/${name}\"? This cannot be undone.`)) return;
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/commands/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Delete failed');
+        showToast(data.synced ? 'Command deleted + synced ✅' : 'Command deleted ✅');
+        await loadSlashCommands(activeDetailBotId);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function syncSlashCommands() {
+    if (!activeDetailBotId) return;
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/commands/sync`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Sync failed');
+        showToast('Slash commands synced ✅');
     } catch (err) {
         showToast('Error: ' + err.message, 'error');
     }

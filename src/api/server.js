@@ -40,6 +40,10 @@ const {
     getBotById,
     updateBot: updateBotRecord,
     deleteBot: deleteBotRecord,
+    createSlashCommand,
+    listSlashCommands,
+    updateSlashCommand,
+    deleteSlashCommand,
     logBotEvent,
     getLatestBotStatusEvent,
     recordBotMessageReceived,
@@ -242,6 +246,90 @@ function buildConversationCsv(conversations) {
         lines.push(row.join(','));
     }
     return lines.join('\n');
+}
+
+const SLASH_NAME_REGEX = /^[a-z0-9_-]{1,32}$/;
+const SLASH_TYPES = new Set(['text', 'ai', 'embed']);
+const SLASH_OPTION_TYPES = new Set(['string', 'integer', 'boolean', 'user', 'channel', 'role']);
+
+function normalizeSlashName(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function parseSlashOptions(options) {
+    if (options === undefined) return { value: undefined };
+    if (!Array.isArray(options)) return { error: 'Options must be an array' };
+    if (options.length > 25) return { error: 'Slash commands support up to 25 options' };
+
+    const parsed = [];
+    for (const option of options) {
+        const name = normalizeSlashName(option?.name);
+        if (!name || !SLASH_NAME_REGEX.test(name)) {
+            return { error: 'Option names must be lowercase and contain only letters, numbers, underscores, or dashes' };
+        }
+        const type = String(option?.type || '').trim().toLowerCase();
+        if (!SLASH_OPTION_TYPES.has(type)) {
+            return { error: `Unsupported option type: ${type}` };
+        }
+        const required = Boolean(option?.required);
+        const description = String(option?.description || '').trim();
+        parsed.push({ name, type, required, description });
+    }
+
+    return { value: parsed };
+}
+
+function parseSlashPayload(raw, { isUpdate = false } = {}) {
+    const data = sanitizeObject(raw || {});
+    const payload = {};
+
+    if (!isUpdate || data.name !== undefined) {
+        const name = normalizeSlashName(data.name);
+        if (!name || !SLASH_NAME_REGEX.test(name)) {
+            return { error: 'Command name must be lowercase and contain only letters, numbers, underscores, or dashes' };
+        }
+        payload.name = name;
+    }
+
+    if (!isUpdate || data.description !== undefined) {
+        const description = String(data.description || '').trim();
+        if (!description || description.length > 100) {
+            return { error: 'Description must be 1-100 characters' };
+        }
+        payload.description = description;
+    }
+
+    if (!isUpdate || data.type !== undefined) {
+        const type = String(data.type || '').trim().toLowerCase();
+        if (!SLASH_TYPES.has(type)) {
+            return { error: 'Command type must be text, ai, or embed' };
+        }
+        payload.type = type;
+    }
+
+    if (data.responseTemplate !== undefined) {
+        payload.responseTemplate = String(data.responseTemplate || '');
+    } else if (!isUpdate) {
+        payload.responseTemplate = '';
+    }
+
+    if (data.enabled !== undefined) {
+        payload.enabled = Boolean(data.enabled);
+    }
+
+    const optionsResult = parseSlashOptions(data.options);
+    if (optionsResult.error) return { error: optionsResult.error };
+    if (optionsResult.value !== undefined) {
+        payload.options = optionsResult.value;
+    } else if (!isUpdate) {
+        payload.options = [];
+    }
+
+    if (isUpdate && Object.keys(payload).length === 0) {
+        return { error: 'No fields provided for update' };
+    }
+
+    return { payload };
 }
 
 // ============ AUTH ============
@@ -673,6 +761,109 @@ app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, asyn
         res.json({ status, tools });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ============ SLASH COMMANDS ============
+
+app.get('/api/bots/:id/commands', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+        const commands = listSlashCommands(config.id);
+        res.json({ commands });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/bots/:id/commands', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const { payload, error } = parseSlashPayload(req.body, { isUpdate: false });
+        if (error) return res.status(400).json({ error });
+
+        const existing = listSlashCommands(config.id).find(cmd => cmd.name === payload.name);
+        if (existing) return res.status(400).json({ error: 'Command name already exists' });
+
+        const command = createSlashCommand({
+            id: uuidv4(),
+            botId: config.id,
+            name: payload.name,
+            description: payload.description,
+            type: payload.type,
+            responseTemplate: payload.responseTemplate,
+            options: payload.options,
+            enabled: payload.enabled ?? true,
+            createdAt: new Date()
+        });
+
+        res.json({ command });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/bots/:id/commands/:cmdId', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const cmdId = String(req.params.cmdId || '').trim();
+        if (!cmdId) return res.status(400).json({ error: 'Command id required' });
+
+        const { payload, error } = parseSlashPayload(req.body, { isUpdate: true });
+        if (error) return res.status(400).json({ error });
+
+        if (payload.name) {
+            const existing = listSlashCommands(config.id).find(cmd => cmd.name === payload.name && cmd.id !== cmdId);
+            if (existing) return res.status(400).json({ error: 'Command name already exists' });
+        }
+
+        const updated = updateSlashCommand(config.id, cmdId, payload);
+        if (!updated) return res.status(404).json({ error: 'Command not found' });
+        res.json({ command: updated });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/bots/:id/commands/:cmdId', auth, validateBotIdParam, async (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const cmdId = String(req.params.cmdId || '').trim();
+        if (!cmdId) return res.status(400).json({ error: 'Command id required' });
+
+        const deleted = deleteSlashCommand(config.id, cmdId);
+        if (!deleted) return res.status(404).json({ error: 'Command not found' });
+
+        let synced = false;
+        try {
+            await botManager.syncSlashCommands(config.id);
+            synced = true;
+        } catch (err) {
+            console.warn(`[BotForge] Slash command sync skipped for ${config.id}:`, err.message);
+        }
+
+        res.json({ success: true, synced });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/bots/:id/commands/sync', auth, validateBotIdParam, async (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const result = await botManager.syncSlashCommands(config.id);
+        res.json({ synced: true, result });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
     }
 });
 

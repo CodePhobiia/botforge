@@ -136,6 +136,19 @@ function initDatabase() {
             FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS slash_commands (
+            id TEXT PRIMARY KEY,
+            bot_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            type TEXT NOT NULL,
+            response_template TEXT,
+            options_json TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id);
         CREATE INDEX IF NOT EXISTS idx_bot_logs_bot_id ON bot_logs(bot_id);
         CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_id ON conversation_logs(bot_id);
@@ -146,6 +159,8 @@ function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_automod_logs_bot_id ON automod_logs(bot_id);
         CREATE INDEX IF NOT EXISTS idx_automod_logs_bot_time ON automod_logs(bot_id, timestamp);
         CREATE INDEX IF NOT EXISTS idx_automod_logs_violation ON automod_logs(bot_id, violation_type);
+        CREATE INDEX IF NOT EXISTS idx_slash_commands_bot_id ON slash_commands(bot_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_slash_commands_bot_name ON slash_commands(bot_id, name);
     `);
 
     ensureUserColumns(db);
@@ -209,6 +224,33 @@ const statements = {
     listBotsByUser: database.prepare('SELECT * FROM bots WHERE user_id = ? ORDER BY created_at ASC'),
     getBotById: database.prepare('SELECT * FROM bots WHERE id = ? AND user_id = ?'),
     listAllBots: database.prepare('SELECT * FROM bots ORDER BY created_at ASC'),
+    insertSlashCommand: database.prepare(`
+        INSERT INTO slash_commands (
+            id, bot_id, name, description, type, response_template, options_json, enabled, created_at
+        ) VALUES (
+            @id, @bot_id, @name, @description, @type, @response_template, @options_json, @enabled, @created_at
+        )
+    `),
+    listSlashCommandsByBot: database.prepare(`
+        SELECT * FROM slash_commands
+        WHERE bot_id = ?
+        ORDER BY created_at ASC, id ASC
+    `),
+    getSlashCommandById: database.prepare(`
+        SELECT * FROM slash_commands
+        WHERE id = ? AND bot_id = ?
+    `),
+    updateSlashCommand: database.prepare(`
+        UPDATE slash_commands SET
+            name = @name,
+            description = @description,
+            type = @type,
+            response_template = @response_template,
+            options_json = @options_json,
+            enabled = @enabled
+        WHERE id = @id AND bot_id = @bot_id
+    `),
+    deleteSlashCommand: database.prepare('DELETE FROM slash_commands WHERE id = ? AND bot_id = ?'),
     insertBotLog: database.prepare(`
         INSERT INTO bot_logs (bot_id, event_type, message, created_at)
         VALUES (@bot_id, @event_type, @message, @created_at)
@@ -384,6 +426,21 @@ function mapAutomodRow(row) {
     };
 }
 
+function mapSlashCommandRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        botId: row.bot_id,
+        name: row.name,
+        description: row.description,
+        type: row.type,
+        responseTemplate: row.response_template || '',
+        options: safeJsonParse(row.options_json, []),
+        enabled: Boolean(row.enabled),
+        createdAt: new Date(row.created_at)
+    };
+}
+
 function createUser({ id, email, passwordHash, name, discordId = null, discordUsername = null, avatarUrl = null }) {
     const createdAt = new Date().toISOString();
     statements.insertUser.run({
@@ -545,6 +602,81 @@ function updateBot(userId, botId, updates) {
 
 function deleteBot(userId, botId) {
     const result = statements.deleteBot.run(botId, userId);
+    return result.changes > 0;
+}
+
+function createSlashCommand({
+    id,
+    botId,
+    name,
+    description,
+    type,
+    responseTemplate = '',
+    options = [],
+    enabled = true,
+    createdAt
+}) {
+    const stamped = createdAt ? toIso(createdAt) : new Date().toISOString();
+    statements.insertSlashCommand.run({
+        id,
+        bot_id: botId,
+        name,
+        description,
+        type,
+        response_template: responseTemplate || '',
+        options_json: JSON.stringify(Array.isArray(options) ? options : []),
+        enabled: enabled ? 1 : 0,
+        created_at: stamped
+    });
+
+    return {
+        id,
+        botId,
+        name,
+        description,
+        type,
+        responseTemplate: responseTemplate || '',
+        options: Array.isArray(options) ? options : [],
+        enabled: Boolean(enabled),
+        createdAt: new Date(stamped)
+    };
+}
+
+function listSlashCommands(botId) {
+    const rows = statements.listSlashCommandsByBot.all(botId);
+    return rows.map(mapSlashCommandRow);
+}
+
+function updateSlashCommand(botId, commandId, updates) {
+    const existing = statements.getSlashCommandById.get(commandId, botId);
+    if (!existing) return null;
+
+    const command = mapSlashCommandRow(existing);
+    const hasProp = (key) => Object.prototype.hasOwnProperty.call(updates, key);
+
+    if (hasProp('name')) command.name = updates.name;
+    if (hasProp('description')) command.description = updates.description;
+    if (hasProp('type')) command.type = updates.type;
+    if (hasProp('responseTemplate')) command.responseTemplate = updates.responseTemplate || '';
+    if (hasProp('options')) command.options = Array.isArray(updates.options) ? updates.options : [];
+    if (hasProp('enabled')) command.enabled = Boolean(updates.enabled);
+
+    statements.updateSlashCommand.run({
+        id: commandId,
+        bot_id: botId,
+        name: command.name,
+        description: command.description,
+        type: command.type,
+        response_template: command.responseTemplate || '',
+        options_json: JSON.stringify(Array.isArray(command.options) ? command.options : []),
+        enabled: command.enabled ? 1 : 0
+    });
+
+    return command;
+}
+
+function deleteSlashCommand(botId, commandId) {
+    const result = statements.deleteSlashCommand.run(commandId, botId);
     return result.changes > 0;
 }
 
@@ -826,6 +958,10 @@ module.exports = {
     getBotById,
     updateBot,
     deleteBot,
+    createSlashCommand,
+    listSlashCommands,
+    updateSlashCommand,
+    deleteSlashCommand,
     logBotEvent,
     getLatestBotStatusEvent,
     recordBotMessageReceived,
