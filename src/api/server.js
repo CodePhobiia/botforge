@@ -95,7 +95,7 @@ app.get('/api/bots', auth, (req, res) => {
 // Create a new bot
 app.post('/api/bots', auth, (req, res) => {
     try {
-        const { name, discordToken, aiProvider, aiApiKey, model, personality, triggerMode, prefix, channels } = req.body;
+        const { name, discordToken, aiProvider, aiApiKey, model, personality, triggerMode, prefix, channels, collaborationMode, tools } = req.body;
         
         if (!name || !discordToken || !aiApiKey) {
             return res.status(400).json({ error: 'Name, Discord token, and AI API key are required' });
@@ -113,9 +113,10 @@ app.post('/api/bots', auth, (req, res) => {
             triggerMode: triggerMode || 'mention',
             prefix: prefix || '!',
             channels: channels || [],
-            tools: [],
+            tools: Array.isArray(tools) ? tools : [],
             maxTokens: 1024,
             historyLimit: 20,
+            collaborationMode: collaborationMode || 'off',
             createdAt: new Date()
         };
 
@@ -196,9 +197,67 @@ app.get('/api/bots/:id/status', auth, (req, res) => {
     try {
         const config = findUserBot(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
+
         const status = botManager.getBotStatus(config.id);
         res.json({ status });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get bot message logs
+app.get('/api/bots/:id/logs', auth, (req, res) => {
+    try {
+        const config = findUserBot(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const logs = botManager.getBotLogs(config.id);
+        res.json({ logs });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get bot health metrics
+app.get('/api/bots/:id/health', auth, (req, res) => {
+    try {
+        const config = findUserBot(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const health = botManager.getBotHealth(config.id);
+        res.json({ health });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Configure bot tools
+app.post('/api/bots/:id/tools', auth, async (req, res) => {
+    try {
+        const config = findUserBot(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const { tools } = req.body;
+        if (!Array.isArray(tools)) {
+            return res.status(400).json({ error: 'Tools must be an array of tool names' });
+        }
+
+        config.tools = tools;
+        const status = await botManager.updateBot(config.id, { tools });
+        res.json({ status, tools });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get conversation history by channel
+app.get('/api/bots/:id/conversations', auth, (req, res) => {
+    try {
+        const config = findUserBot(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const conversations = botManager.getBotConversations(config.id);
+        res.json({ conversations });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
