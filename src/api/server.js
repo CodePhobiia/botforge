@@ -321,7 +321,7 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, '../../public/index.html'));
 });
 
-app.get('/dashboard/*', (req, res) => {
+app.get('/dashboard/{*path}', (req, res) => {
     res.sendFile(path.join(__dirname, '../../public/index.html'));
 });
 
