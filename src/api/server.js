@@ -668,15 +668,17 @@ async function shutdown(signal) {
     process.exit(0);
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+if (NODE_ENV !== 'test') {
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
 
-server.listen(PORT, () => {
-    logStartupBanner();
-    console.log(`\n🔥 BotForge server running on http://localhost:${PORT}\n`);
-    bootstrapBots().catch((err) => {
-        console.error('[BotForge] Failed to bootstrap bots:', err.message);
+    server.listen(PORT, () => {
+        logStartupBanner();
+        console.log(`\n🔥 BotForge server running on http://localhost:${PORT}\n`);
+        bootstrapBots().catch((err) => {
+            console.error('[BotForge] Failed to bootstrap bots:', err.message);
+        });
     });
-});
+}
 
 module.exports = app;
