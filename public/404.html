@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotForge — Page Not Found</title>
+    <meta name="description" content="The page you are looking for does not exist.">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#0a0b10;--card:#151823;--border:#242734;--text:#f8fafc;--muted:#a1a1aa;--accent:#7c3aed;--accent-2:#22d3ee}
+        body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+        .card{max-width:560px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px;box-shadow:0 30px 60px rgba(0,0,0,0.4)}
+        .code{font-family:'IBM Plex Mono',monospace;font-size:48px;color:var(--accent-2);letter-spacing:2px}
+        h1{font-size:26px;margin:12px 0}
+        p{color:var(--muted);font-size:14px;line-height:1.6}
+        .actions{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}
+        .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;font-weight:600;font-size:14px;border:1px solid transparent;background:var(--accent);color:white;text-decoration:none}
+        .btn:hover{background:#6d28d9}
+        .btn.outline{background:transparent;border-color:var(--border);color:var(--text)}
+        .btn.outline:hover{border-color:var(--accent);color:var(--accent)}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="code">404</div>
+        <h1>Page not found</h1>
+        <p>The page you’re looking for moved, was renamed, or never existed. Let’s get you back to BotForge.</p>
+        <div class="actions">
+            <a class="btn" href="/dashboard">Go to dashboard</a>
+            <a class="btn outline" href="/">Return home</a>
+        </div>
+    </div>
+</body>
+</html>
