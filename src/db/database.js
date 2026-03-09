@@ -4,7 +4,7 @@ const Database = require('better-sqlite3');
 const { encrypt, decrypt } = require('./encryption');
 
 const DATA_DIR = path.join(__dirname, '../../data');
-const DB_PATH = path.join(DATA_DIR, 'botforge.db');
+const DB_PATH = process.env.BOTFORGE_DB_PATH || path.join(DATA_DIR, 'botforge.db');
 
 let db;
 
@@ -37,8 +37,11 @@ function ensureBotColumns(database) {
 function initDatabase() {
     if (db) return db;
 
-    if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (DB_PATH !== ':memory:') {
+        const dbDir = path.dirname(DB_PATH);
+        if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true });
+        }
     }
 
     db = new Database(DB_PATH);
@@ -102,10 +105,39 @@ function initDatabase() {
             FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS bot_analytics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            command TEXT,
+            count INTEGER,
+            duration_ms INTEGER,
+            start_at TEXT,
+            end_at TEXT,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS automod_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_id TEXT NOT NULL,
+            user_id TEXT,
+            username TEXT,
+            action TEXT NOT NULL,
+            reason TEXT,
+            message_content TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id);
         CREATE INDEX IF NOT EXISTS idx_bot_logs_bot_id ON bot_logs(bot_id);
         CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_id ON conversation_logs(bot_id);
         CREATE INDEX IF NOT EXISTS idx_conversation_logs_bot_time ON conversation_logs(bot_id, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_bot_analytics_bot_id ON bot_analytics(bot_id);
+        CREATE INDEX IF NOT EXISTS idx_bot_analytics_bot_time ON bot_analytics(bot_id, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_bot_analytics_bot_event ON bot_analytics(bot_id, event_type);
+        CREATE INDEX IF NOT EXISTS idx_automod_logs_bot_id ON automod_logs(bot_id);
     `);
 
     ensureUserColumns(db);
@@ -207,6 +239,31 @@ const statements = {
         SELECT * FROM conversation_logs
         WHERE bot_id = ?
         ORDER BY timestamp ASC, id ASC
+    `),
+    insertBotAnalytics: database.prepare(`
+        INSERT INTO bot_analytics (
+            bot_id, event_type, command, count, duration_ms, start_at, end_at, timestamp
+        ) VALUES (
+            @bot_id, @event_type, @command, @count, @duration_ms, @start_at, @end_at, @timestamp
+        )
+    `),
+    getBotAnalyticsByRange: database.prepare(`
+        SELECT * FROM bot_analytics
+        WHERE bot_id = ? AND timestamp >= ?
+        ORDER BY timestamp ASC, id ASC
+    `),
+    insertAutomodLog: database.prepare(`
+        INSERT INTO automod_logs (
+            bot_id, user_id, username, action, reason, message_content, created_at
+        ) VALUES (
+            @bot_id, @user_id, @username, @action, @reason, @message_content, @created_at
+        )
+    `),
+    getAutomodLogsByBot: database.prepare(`
+        SELECT * FROM automod_logs
+        WHERE bot_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ? OFFSET ?
     `)
 };
 
@@ -501,6 +558,188 @@ function getAllConversationsByBot(botId) {
     return rows.map(mapConversationRow);
 }
 
+function recordBotMessageReceived(botId, command, timestamp) {
+    if (!botId) return;
+    statements.insertBotAnalytics.run({
+        bot_id: botId,
+        event_type: 'message_received',
+        command: command || null,
+        count: 1,
+        duration_ms: null,
+        start_at: null,
+        end_at: null,
+        timestamp: timestamp ? toIso(timestamp) : new Date().toISOString()
+    });
+}
+
+function recordBotMessageSent(botId, count = 1, timestamp) {
+    if (!botId) return;
+    const safeCount = Number.isFinite(count) ? count : 1;
+    statements.insertBotAnalytics.run({
+        bot_id: botId,
+        event_type: 'message_sent',
+        command: null,
+        count: safeCount,
+        duration_ms: null,
+        start_at: null,
+        end_at: null,
+        timestamp: timestamp ? toIso(timestamp) : new Date().toISOString()
+    });
+}
+
+function recordBotError(botId, timestamp) {
+    if (!botId) return;
+    statements.insertBotAnalytics.run({
+        bot_id: botId,
+        event_type: 'error',
+        command: null,
+        count: 1,
+        duration_ms: null,
+        start_at: null,
+        end_at: null,
+        timestamp: timestamp ? toIso(timestamp) : new Date().toISOString()
+    });
+}
+
+function recordBotUptime(botId, startAt, endAt) {
+    if (!botId) return;
+    const start = startAt ? new Date(startAt) : null;
+    const end = endAt ? new Date(endAt) : new Date();
+    const durationMs = start && end && end.getTime() >= start.getTime()
+        ? end.getTime() - start.getTime()
+        : 0;
+    statements.insertBotAnalytics.run({
+        bot_id: botId,
+        event_type: 'uptime',
+        command: null,
+        count: null,
+        duration_ms: durationMs,
+        start_at: start ? start.toISOString() : null,
+        end_at: end.toISOString(),
+        timestamp: end.toISOString()
+    });
+}
+
+function getBotAnalytics(botId, rangeHours = 24) {
+    if (!botId) return null;
+    const hours = Number.isFinite(rangeHours) ? rangeHours : 24;
+    const clampedHours = Math.max(1, Math.min(hours, 720));
+    const endAt = new Date();
+    const startAt = new Date(endAt.getTime() - clampedHours * 60 * 60 * 1000);
+    const rows = statements.getBotAnalyticsByRange.all(botId, startAt.toISOString());
+
+    const bucketCount = Math.max(1, Math.min(24, Math.ceil(clampedHours)));
+    const rangeMs = endAt.getTime() - startAt.getTime();
+    const bucketSizeMs = rangeMs / bucketCount;
+
+    const series = {
+        labels: [],
+        messagesSent: Array(bucketCount).fill(0),
+        messagesReceived: Array(bucketCount).fill(0),
+        uptimeMs: Array(bucketCount).fill(0)
+    };
+
+    for (let i = 0; i < bucketCount; i += 1) {
+        series.labels.push(new Date(startAt.getTime() + i * bucketSizeMs).toISOString());
+    }
+
+    const totals = {
+        messagesSent: 0,
+        messagesReceived: 0,
+        errors: 0,
+        uptimeMs: 0,
+        uptimePct: 0,
+        errorRate: 0
+    };
+
+    const commandCounts = new Map();
+
+    for (const row of rows) {
+        const timestamp = row.timestamp ? new Date(row.timestamp).getTime() : null;
+        const index = timestamp
+            ? Math.min(bucketCount - 1, Math.max(0, Math.floor((timestamp - startAt.getTime()) / bucketSizeMs)))
+            : 0;
+
+        if (row.event_type === 'message_sent') {
+            const count = Number.isFinite(row.count) ? row.count : 1;
+            totals.messagesSent += count;
+            series.messagesSent[index] += count;
+        } else if (row.event_type === 'message_received') {
+            const count = Number.isFinite(row.count) ? row.count : 1;
+            totals.messagesReceived += count;
+            series.messagesReceived[index] += count;
+            if (row.command) {
+                commandCounts.set(row.command, (commandCounts.get(row.command) || 0) + count);
+            }
+        } else if (row.event_type === 'error') {
+            totals.errors += Number.isFinite(row.count) ? row.count : 1;
+        } else if (row.event_type === 'uptime') {
+            const duration = Number.isFinite(row.duration_ms) ? row.duration_ms : 0;
+            totals.uptimeMs += duration;
+            series.uptimeMs[index] += duration;
+        }
+    }
+
+    if (rangeMs > 0) {
+        totals.uptimePct = (totals.uptimeMs / rangeMs) * 100;
+    }
+    const totalEvents = totals.messagesSent + totals.messagesReceived + totals.errors;
+    if (totalEvents > 0) {
+        totals.errorRate = (totals.errors / totalEvents) * 100;
+    }
+
+    const topCommands = Array.from(commandCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([command, count]) => ({ command, count }));
+
+    return {
+        range: {
+            hours: clampedHours,
+            start: startAt.toISOString(),
+            end: endAt.toISOString()
+        },
+        totals,
+        topCommands,
+        series
+    };
+}
+
+function logAutomodEvent({
+    botId,
+    userId = null,
+    username = null,
+    action,
+    reason = null,
+    messageContent = null,
+    createdAt = null
+}) {
+    if (!botId || !action) return;
+    statements.insertAutomodLog.run({
+        bot_id: botId,
+        user_id: userId,
+        username,
+        action,
+        reason,
+        message_content: messageContent,
+        created_at: createdAt ? toIso(createdAt) : new Date().toISOString()
+    });
+}
+
+function getAutomodLogs(botId, limit = 50, offset = 0) {
+    const rows = statements.getAutomodLogsByBot.all(botId, limit, offset);
+    return rows.map((row) => ({
+        id: row.id,
+        botId: row.bot_id,
+        userId: row.user_id,
+        username: row.username,
+        action: row.action,
+        reason: row.reason,
+        messageContent: row.message_content,
+        createdAt: row.created_at
+    }));
+}
+
 module.exports = {
     initDatabase,
     createUser,
@@ -517,8 +756,15 @@ module.exports = {
     deleteBot,
     logBotEvent,
     getLatestBotStatusEvent,
+    recordBotMessageReceived,
+    recordBotMessageSent,
+    recordBotError,
+    recordBotUptime,
+    getBotAnalytics,
     logConversation,
     getConversationsByBot,
     searchConversations,
-    getAllConversationsByBot
+    getAllConversationsByBot,
+    logAutomodEvent,
+    getAutomodLogs
 };
