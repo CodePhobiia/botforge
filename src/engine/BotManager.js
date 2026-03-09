@@ -9,6 +9,7 @@ const { generateResponse } = require('./AIProvider');
 const { ToolSystem } = require('./ToolSystem');
 const { RateLimiter } = require('./RateLimiter');
 const { AutoMod } = require('./AutoMod');
+const { SlashCommandManager } = require('./SlashCommandManager');
 const { logConversation, logModAction } = require('../db/database');
 
 const DEFAULT_MESSAGE_LOG_LIMIT = 100;
@@ -64,6 +65,8 @@ class BotInstance {
         this.baseRestartDelayMs = config.baseRestartDelayMs || 1000;
         this.reconnectTimer = null;
         this.shouldReconnect = true;
+        this.deregisterSlashOnStop = config.deregisterSlashOnStop
+            ?? process.env.BOTFORGE_DEREGISTER_SLASH_ON_STOP === 'true';
 
         this.health = {
             totalResponses: 0,
@@ -74,6 +77,8 @@ class BotInstance {
             lastResponseAt: null,
             lastError: null
         };
+
+        this.slashCommandManager = new SlashCommandManager(this);
     }
 
     async start(options = {}) {
@@ -116,6 +121,13 @@ class BotInstance {
         }
 
         if (this.client) {
+            if (this.slashCommandManager && this.deregisterSlashOnStop) {
+                try {
+                    await this.slashCommandManager.deregisterAll();
+                } catch (err) {
+                    console.warn(`[BotManager] Slash command deregister failed for "${this.name}":`, err.message);
+                }
+            }
             await this.client.destroy();
             this.client = null;
         }
@@ -130,7 +142,7 @@ class BotInstance {
     }
 
     _attachClientEvents() {
-        this.client.on(Events.ClientReady, () => {
+        this.client.on(Events.ClientReady, async () => {
             this.status = 'running';
             this.error = null;
             this.startedAt = new Date();
@@ -143,10 +155,29 @@ class BotInstance {
             }));
             console.log(`[BotManager] Bot "${this.name}" (${this.id}) is online in ${this.guilds.length} server(s)`);
             this._notifyStatus();
+
+            if (this.slashCommandManager) {
+                try {
+                    await this.slashCommandManager.attachClient(this.client);
+                    await this.slashCommandManager.syncCommands();
+                } catch (err) {
+                    console.warn(`[BotManager] Slash command sync failed for "${this.name}":`, err.message);
+                }
+            }
         });
 
         this.client.on(Events.MessageCreate, async (message) => {
             await this._handleMessage(message);
+        });
+
+        this.client.on(Events.InteractionCreate, async (interaction) => {
+            try {
+                if (this.slashCommandManager) {
+                    await this.slashCommandManager.handleInteraction(interaction);
+                }
+            } catch (err) {
+                console.warn(`[BotManager] Slash command error for "${this.name}":`, err.message);
+            }
         });
 
         this.client.on(Events.GuildMemberAdd, async (member) => {
@@ -1059,6 +1090,9 @@ class BotManager {
         if (config.collaborationMode) bot.collaborationMode = config.collaborationMode;
         if (Number.isFinite(config.messageLogLimit)) bot.messageLogLimit = config.messageLogLimit;
         if (config.automodConfig !== undefined) bot.setAutomodConfig(config.automodConfig);
+        if (bot.slashCommandManager) {
+            bot.slashCommandManager.updateFromBot();
+        }
 
         if (wasRunning) await bot.start();
         return bot.getStatus();
@@ -1073,6 +1107,9 @@ class BotManager {
         if (config.triggerMode !== undefined) bot.triggerMode = config.triggerMode;
         if (Array.isArray(config.tools)) bot.tools = config.tools;
         if (config.rateLimits !== undefined) bot.rateLimits = config.rateLimits;
+        if (bot.slashCommandManager) {
+            bot.slashCommandManager.updateFromBot();
+        }
 
         return bot.getStatus();
     }
@@ -1174,6 +1211,16 @@ class BotManager {
             totalMessages += bot.messageCount;
         }
         return { total: this.bots.size, running, stopped, errors, totalMessages };
+    }
+
+    async syncSlashCommands(id) {
+        const bot = this.bots.get(id);
+        if (!bot) throw new Error(`Bot ${id} not found`);
+        if (bot.status !== 'running') {
+            throw new Error('Bot must be running to sync slash commands');
+        }
+        if (!bot.slashCommandManager) throw new Error('Slash command manager not available');
+        return await bot.slashCommandManager.syncCommands();
     }
 }
 
