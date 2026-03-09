@@ -4,6 +4,7 @@
  */
 
 const { Client, GatewayIntentBits, Events } = require('discord.js');
+const EventEmitter = require('events');
 const { generateResponse } = require('./AIProvider');
 const { ToolSystem } = require('./ToolSystem');
 const { RateLimiter } = require('./RateLimiter');
@@ -25,6 +26,7 @@ class BotInstance {
         this.tools = config.tools || [];
         this.channels = config.channels || []; // empty = all channels
         this.status = 'stopped'; // stopped | starting | running | error | reconnecting
+        this.lastStatus = this.status;
         this.client = null;
         this.error = null;
         this.messageCount = 0;
@@ -482,7 +484,27 @@ class BotInstance {
         return message.member?.displayName || message.author?.username || 'User';
     }
 
+    _extractCommandName(message) {
+        const content = (message?.content || '').trim();
+        if (!content) return null;
+        if (this.triggerMode === 'prefix' && this.prefix && content.startsWith(this.prefix)) {
+            const remaining = content.slice(this.prefix.length).trim();
+            const command = remaining.split(/\s+/)[0];
+            return command ? command.toLowerCase() : null;
+        }
+        if (this.triggerMode === 'mention' && this.client?.user?.id) {
+            const mentionRegex = new RegExp(`^<@!?${this.client.user.id}>\\s*`);
+            if (mentionRegex.test(content)) {
+                const remaining = content.replace(mentionRegex, '').trim();
+                const command = remaining.split(/\s+/)[0];
+                return command ? command.toLowerCase() : null;
+            }
+        }
+        return null;
+    }
+
     _logIncomingMessage(message) {
+        const commandName = this._extractCommandName(message);
         const entry = {
             id: message.id,
             channelId: message.channel.id,
@@ -494,18 +516,39 @@ class BotInstance {
             botId: this.id
         };
         this._appendMessageLog(message.channel.id, entry);
+        if (this.manager && this.manager.emitBotEvent) {
+            this.manager.emitBotEvent('message', {
+                botId: this.id,
+                userId: this.userId,
+                direction: 'received',
+                command: commandName,
+                channelId: entry.channelId,
+                timestamp: entry.timestamp
+            });
+        }
     }
 
     _logOutgoingMessages(channelId, response, sentMessages) {
+        const sentCount = sentMessages && sentMessages.length ? sentMessages.length : 1;
         if (!sentMessages || sentMessages.length === 0) {
             const entry = this._buildBotLog(channelId, response, null);
             this._appendMessageLog(channelId, entry);
-            return;
+        } else {
+            for (const sent of sentMessages) {
+                const entry = this._buildBotLog(channelId, sent.content, sent.message);
+                this._appendMessageLog(channelId, entry);
+            }
         }
 
-        for (const sent of sentMessages) {
-            const entry = this._buildBotLog(channelId, sent.content, sent.message);
-            this._appendMessageLog(channelId, entry);
+        if (this.manager && this.manager.emitBotEvent) {
+            this.manager.emitBotEvent('message', {
+                botId: this.id,
+                userId: this.userId,
+                direction: 'sent',
+                count: sentCount,
+                channelId,
+                timestamp: new Date().toISOString()
+            });
         }
     }
 
@@ -545,12 +588,34 @@ class BotInstance {
         this.health.totalErrors += 1;
         this.health.lastErrorAt = new Date().toISOString();
         this.health.lastError = err?.message || 'Unknown error';
+        if (this.manager && this.manager.emitBotEvent) {
+            this.manager.emitBotEvent('error', {
+                botId: this.id,
+                userId: this.userId,
+                name: this.name,
+                message: this.health.lastError,
+                status: this.status,
+                timestamp: this.health.lastErrorAt
+            });
+        }
     }
 
     _recordUptimeStop() {
         if (this.lastStartAt) {
-            this.totalUptimeMs += Date.now() - this.lastStartAt.getTime();
+            const startAt = this.lastStartAt;
+            const endAt = new Date();
+            const durationMs = endAt.getTime() - startAt.getTime();
+            this.totalUptimeMs += durationMs;
             this.lastStartAt = null;
+            if (this.manager && this.manager.emitBotEvent) {
+                this.manager.emitBotEvent('uptime', {
+                    botId: this.id,
+                    userId: this.userId,
+                    startAt,
+                    endAt,
+                    durationMs
+                });
+            }
         }
     }
 
@@ -609,8 +674,20 @@ class BotInstance {
     }
 
     _notifyStatus() {
+        const status = this.getStatus();
+        const previousStatus = this.lastStatus;
+        this.lastStatus = status.status;
+        if (this.manager && this.manager.emitBotEvent) {
+            this.manager.emitBotEvent('status', {
+                botId: this.id,
+                ...status,
+                userId: this.userId,
+                previousStatus,
+                timestamp: new Date().toISOString()
+            });
+        }
         if (this.onStatusChange) {
-            this.onStatusChange(this.getStatus());
+            this.onStatusChange(status);
         }
     }
 
@@ -684,6 +761,15 @@ class BotManager {
         this.sharedHistory = new Map(); // userId:channelId -> messages[]
         this.toolSystem = new ToolSystem();
         this.rateLimiter = new RateLimiter();
+        this.emitter = new EventEmitter();
+    }
+
+    on(eventName, handler) {
+        this.emitter.on(eventName, handler);
+    }
+
+    emitBotEvent(eventName, payload) {
+        this.emitter.emit(eventName, payload);
     }
 
     async createBot(config) {

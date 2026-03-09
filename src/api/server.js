@@ -4,6 +4,8 @@
  */
 
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
@@ -32,7 +34,12 @@ const {
     updateBot: updateBotRecord,
     deleteBot: deleteBotRecord,
     logBotEvent,
-    getLatestBotStatusEvent
+    getLatestBotStatusEvent,
+    recordBotMessageReceived,
+    recordBotMessageSent,
+    recordBotError,
+    recordBotUptime,
+    getBotAnalytics
 } = require('../db/database');
 
 const app = express();
@@ -40,6 +47,13 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'botforge-secret-change-me-' + uuidv4();
 
 const botManager = new BotManager();
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    }
+});
 
 app.disable('x-powered-by');
 app.use(securityHeaders);
@@ -54,6 +68,51 @@ function maskBotForResponse(config, status = null) {
     const payload = status ? { ...rest, ...status } : rest;
     return { ...payload, discordToken: '***', aiApiKey: '***' };
 }
+
+io.use((socket, next) => {
+    const socketToken = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!socketToken) return next(new Error('Unauthorized'));
+    try {
+        const decoded = jwt.verify(socketToken, JWT_SECRET);
+        socket.userId = decoded.userId;
+        return next();
+    } catch {
+        return next(new Error('Unauthorized'));
+    }
+});
+
+io.on('connection', (socket) => {
+    if (!socket.userId) return;
+    socket.join(socket.userId);
+    socket.emit('bots_snapshot', botManager.getAllBots(socket.userId));
+});
+
+function emitToUser(userId, event, payload) {
+    if (!userId) return;
+    io.to(userId).emit(event, payload);
+}
+
+botManager.on('status', (payload) => {
+    emitToUser(payload.userId, 'bot_status', payload);
+});
+
+botManager.on('message', (payload) => {
+    emitToUser(payload.userId, 'bot_message', payload);
+    if (payload.direction === 'received') {
+        recordBotMessageReceived(payload.botId, payload.command, payload.timestamp);
+    } else if (payload.direction === 'sent') {
+        recordBotMessageSent(payload.botId, payload.count || 1, payload.timestamp);
+    }
+});
+
+botManager.on('error', (payload) => {
+    emitToUser(payload.userId, 'bot_error', payload);
+    recordBotError(payload.botId, payload.timestamp);
+});
+
+botManager.on('uptime', (payload) => {
+    recordBotUptime(payload.botId, payload.startAt, payload.endAt);
+});
 
 // ============ AUTH ============
 
@@ -314,6 +373,23 @@ app.get('/api/bots/:id/health', auth, validateBotIdParam, (req, res) => {
     }
 });
 
+// Get bot analytics
+app.get('/api/bots/:id/analytics', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const range = (req.query.range || '24h').toString();
+        const rangeMap = { '24h': 24, '7d': 168, '30d': 720 };
+        const rangeHours = rangeMap[range] || 24;
+
+        const analytics = getBotAnalytics(config.id, rangeHours);
+        res.json({ analytics });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Configure bot tools
 app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, async (req, res) => {
     try {
@@ -390,7 +466,7 @@ app.get('/dashboard/{*path}', (req, res) => {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`\n🔥 BotForge server running on http://localhost:${PORT}\n`);
     bootstrapBots().catch((err) => {
         console.error('[BotForge] Failed to bootstrap bots:', err.message);
