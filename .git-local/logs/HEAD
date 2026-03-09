@@ -1,3 +1,0 @@
-0000000000000000000000000000000000000000 3cc7324701bc40a4d62accec8b14b1312c7bc5ec Codex <codex@local> 1773021596 +0000	commit (initial): feat: add sqlite persistence with encryption
-3cc7324701bc40a4d62accec8b14b1312c7bc5ec 730b16cdc3a3f2a4419235725ccf31e9baf57207 Codex <codex@local> 1773021640 +0000	commit: fix: guard bot updates
-730b16cdc3a3f2a4419235725ccf31e9baf57207 7b6b652b188aa260a84aa318f5c55547f8d4a9e7 Codex <codex@local> 1773021678 +0000	commit: fix: preserve null bot lists
