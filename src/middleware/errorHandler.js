@@ -9,6 +9,7 @@ function errorHandler(err, req, res, next) {
 
     const timestamp = new Date().toISOString();
     const status = err.statusCode || err.status || 500;
+    const requestId = req.requestId;
 
     if (err.type === 'entity.too.large') {
         return res.status(413).json({ error: 'Request body too large (max 1MB)' });
@@ -26,9 +27,14 @@ function errorHandler(err, req, res, next) {
     const safeMessage = status >= 500 && isProd ? 'Internal server error' : err.message || 'Request failed';
 
     const logMessage = err.stack || err.message || String(err);
-    console.error(`[${timestamp}] ${logMessage}`);
+    if (requestId) {
+        console.error(`[${timestamp}] [${requestId}] ${logMessage}`);
+    } else {
+        console.error(`[${timestamp}] ${logMessage}`);
+    }
 
-    return res.status(status).json({ error: safeMessage });
+    const payload = requestId ? { error: safeMessage, requestId } : { error: safeMessage };
+    return res.status(status).json(payload);
 }
 
 module.exports = {

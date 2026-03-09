@@ -715,6 +715,17 @@ class BotManager {
         return bot.getStatus();
     }
 
+    async stopAllBots() {
+        const stops = [];
+        for (const bot of this.bots.values()) {
+            if (bot.status !== 'stopped') {
+                stops.push(bot.stop());
+            }
+        }
+        if (!stops.length) return;
+        await Promise.allSettled(stops);
+    }
+
     async removeBot(id) {
         const bot = this.bots.get(id);
         if (!bot) throw new Error(`Bot ${id} not found`);

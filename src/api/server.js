@@ -4,13 +4,15 @@
  */
 
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { version: APP_VERSION } = require('../../package.json');
 const { BotManager } = require('../engine/BotManager');
 const { personalityPresets } = require('../engine/PersonalityPresets');
-const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser } = require('../middleware/security');
+const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser, requestIdMiddleware } = require('../middleware/security');
 const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
 const { buildDiscordAuthUrl, getDiscordRedirectUri, handleDiscordCallback } = require('../auth/discord-oauth');
 const {
@@ -37,11 +39,15 @@ const {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'botforge-secret-change-me-' + uuidv4();
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const JWT_SECRET_ENV = process.env.JWT_SECRET;
+const JWT_SECRET = JWT_SECRET_ENV || `botforge-secret-change-me-${uuidv4()}`;
+const IS_DEFAULT_JWT = !JWT_SECRET_ENV;
 
 const botManager = new BotManager();
 
 app.disable('x-powered-by');
+app.use(requestIdMiddleware);
 app.use(securityHeaders);
 app.use(corsMiddleware());
 app.use(jsonBodyParser);
@@ -54,6 +60,55 @@ function maskBotForResponse(config, status = null) {
     const payload = status ? { ...rest, ...status } : rest;
     return { ...payload, discordToken: '***', aiApiKey: '***' };
 }
+
+function getCorsStatus() {
+    const raw = process.env.CORS_ORIGINS;
+    if (raw) {
+        const origins = raw.split(',').map((item) => item.trim()).filter(Boolean);
+        if (origins.length) return origins.join(', ');
+    }
+    return NODE_ENV === 'production' ? 'restricted (set CORS_ORIGINS)' : 'allow all (dev)';
+}
+
+function getEncryptionKeyStatus() {
+    if (process.env.ENCRYPTION_KEY) return 'env (ENCRYPTION_KEY)';
+    if (process.env.BOTFORGE_ENCRYPTION_KEY) return 'env (BOTFORGE_ENCRYPTION_KEY)';
+    const keyPath = path.join(__dirname, '../../.botforge-key');
+    if (fs.existsSync(keyPath)) return 'file (.botforge-key)';
+    return 'auto-generated on first use';
+}
+
+function logStartupBanner() {
+    const discordConfigured = Boolean(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET);
+    const jwtStatus = IS_DEFAULT_JWT ? 'ephemeral (set JWT_SECRET)' : 'custom';
+    console.log('\n🛠️  BotForge startup');
+    console.log(`• Environment: ${NODE_ENV}`);
+    console.log(`• Version: ${APP_VERSION}`);
+    console.log(`• Port: ${PORT}`);
+    console.log(`• JWT secret: ${jwtStatus}`);
+    console.log(`• Discord OAuth: ${discordConfigured ? 'enabled' : 'disabled'}`);
+    console.log(`• CORS: ${getCorsStatus()}`);
+    console.log(`• Encryption key: ${getEncryptionKeyStatus()}`);
+    console.log('• Request IDs: enabled');
+    if (NODE_ENV === 'production' && IS_DEFAULT_JWT) {
+        console.warn('[BotForge] WARNING: JWT_SECRET is not set; sessions will reset on restart.');
+    }
+    if (NODE_ENV === 'production' && getCorsStatus().startsWith('restricted')) {
+        console.warn('[BotForge] WARNING: CORS_ORIGINS not set; cross-origin requests will be blocked.');
+    }
+}
+
+// ============ HEALTH ============
+
+app.get('/api/health', (req, res) => {
+    const stats = botManager.getStats();
+    res.json({
+        status: 'ok',
+        uptime: process.uptime(),
+        version: APP_VERSION,
+        bots_running: stats.running
+    });
+});
 
 // ============ AUTH ============
 
@@ -291,7 +346,7 @@ app.get('/api/bots/:id/status', auth, validateBotIdParam, (req, res) => {
 // Get bot message logs
 app.get('/api/bots/:id/logs', auth, validateBotIdParam, (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
         const logs = botManager.getBotLogs(config.id);
@@ -304,7 +359,7 @@ app.get('/api/bots/:id/logs', auth, validateBotIdParam, (req, res) => {
 // Get bot health metrics
 app.get('/api/bots/:id/health', auth, validateBotIdParam, (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
         const health = botManager.getBotHealth(config.id);
@@ -317,7 +372,7 @@ app.get('/api/bots/:id/health', auth, validateBotIdParam, (req, res) => {
 // Configure bot tools
 app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, async (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
         const { tools } = req.body;
@@ -336,7 +391,7 @@ app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, asyn
 // Get conversation history by channel
 app.get('/api/bots/:id/conversations', auth, validateBotIdParam, (req, res) => {
     try {
-        const config = findUserBot(req.userId, req.params.id);
+        const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
         const conversations = botManager.getBotConversations(config.id);
@@ -390,7 +445,39 @@ app.get('/dashboard/{*path}', (req, res) => {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+let server;
+let isShuttingDown = false;
+
+async function shutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    console.log(`[BotForge] Received ${signal}. Shutting down...`);
+    const shutdownTimer = setTimeout(() => {
+        console.error('[BotForge] Forced shutdown after timeout.');
+        process.exit(1);
+    }, 10000);
+    shutdownTimer.unref();
+
+    const serverClose = server
+        ? new Promise((resolve) => server.close(resolve))
+        : Promise.resolve();
+
+    try {
+        await botManager.stopAllBots();
+    } catch (err) {
+        console.error('[BotForge] Error while stopping bots:', err.message);
+    }
+
+    await serverClose;
+    process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+server = app.listen(PORT, () => {
+    logStartupBanner();
     console.log(`\n🔥 BotForge server running on http://localhost:${PORT}\n`);
     bootstrapBots().catch((err) => {
         console.error('[BotForge] Failed to bootstrap bots:', err.message);

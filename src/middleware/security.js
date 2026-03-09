@@ -3,6 +3,7 @@
  */
 
 const cors = require('cors');
+const crypto = require('crypto');
 const express = require('express');
 
 const BODY_LIMIT = '1mb';
@@ -30,7 +31,8 @@ function parseAllowedOrigins() {
 
 function corsMiddleware(options = {}) {
     const allowedOrigins = options.origins || parseAllowedOrigins();
-    const allowAll = !allowedOrigins;
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowAll = !allowedOrigins && !isProduction;
 
     return cors({
         origin: (origin, callback) => {
@@ -49,9 +51,18 @@ function corsMiddleware(options = {}) {
 const jsonBodyParser = express.json({ limit: BODY_LIMIT, strict: true });
 const urlencodedBodyParser = express.urlencoded({ limit: BODY_LIMIT, extended: false });
 
+function requestIdMiddleware(req, res, next) {
+    const headerValue = req.headers['x-request-id'];
+    const requestId = headerValue && String(headerValue).trim() ? String(headerValue).trim() : crypto.randomUUID();
+    req.requestId = requestId;
+    res.setHeader('X-Request-Id', requestId);
+    next();
+}
+
 module.exports = {
     securityHeaders,
     corsMiddleware,
     jsonBodyParser,
-    urlencodedBodyParser
+    urlencodedBodyParser,
+    requestIdMiddleware
 };
