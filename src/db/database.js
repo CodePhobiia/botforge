@@ -8,6 +8,21 @@ const DB_PATH = path.join(DATA_DIR, 'botforge.db');
 
 let db;
 
+function ensureUserColumns(database) {
+    const columns = database.prepare(`PRAGMA table_info(users)`).all().map((row) => row.name);
+    const addColumn = (name, type) => {
+        if (!columns.includes(name)) {
+            database.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
+        }
+    };
+
+    addColumn('discord_id', 'TEXT');
+    addColumn('discord_username', 'TEXT');
+    addColumn('avatar_url', 'TEXT');
+
+    database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id)');
+}
+
 function initDatabase() {
     if (db) return db;
 
@@ -25,6 +40,9 @@ function initDatabase() {
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             name TEXT,
+            discord_id TEXT,
+            discord_username TEXT,
+            avatar_url TEXT,
             created_at TEXT NOT NULL
         );
 
@@ -61,6 +79,8 @@ function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_bot_logs_bot_id ON bot_logs(bot_id);
     `);
 
+    ensureUserColumns(db);
+
     return db;
 }
 
@@ -68,11 +88,20 @@ const database = initDatabase();
 
 const statements = {
     insertUser: database.prepare(`
-        INSERT INTO users (id, email, password_hash, name, created_at)
-        VALUES (@id, @email, @password_hash, @name, @created_at)
+        INSERT INTO users (id, email, password_hash, name, discord_id, discord_username, avatar_url, created_at)
+        VALUES (@id, @email, @password_hash, @name, @discord_id, @discord_username, @avatar_url, @created_at)
     `),
     getUserByEmail: database.prepare('SELECT * FROM users WHERE email = ?'),
     getUserById: database.prepare('SELECT * FROM users WHERE id = ?'),
+    getUserByDiscordId: database.prepare('SELECT * FROM users WHERE discord_id = ?'),
+    updateDiscordProfile: database.prepare(`
+        UPDATE users SET
+            discord_id = @discord_id,
+            discord_username = @discord_username,
+            avatar_url = @avatar_url,
+            email = COALESCE(@email, email)
+        WHERE id = @id
+    `),
     insertBot: database.prepare(`
         INSERT INTO bots (
             id, user_id, name, discord_token_encrypted, ai_provider,
@@ -140,6 +169,9 @@ function mapUserRow(row) {
         id: row.id,
         email: row.email,
         name: row.name,
+        discordId: row.discord_id,
+        discordUsername: row.discord_username,
+        avatarUrl: row.avatar_url,
         passwordHash: row.password_hash,
         createdAt: new Date(row.created_at)
     };
@@ -167,16 +199,28 @@ function mapBotRow(row) {
     };
 }
 
-function createUser({ id, email, passwordHash, name }) {
+function createUser({ id, email, passwordHash, name, discordId = null, discordUsername = null, avatarUrl = null }) {
     const createdAt = new Date().toISOString();
     statements.insertUser.run({
         id,
         email,
         password_hash: passwordHash,
         name,
+        discord_id: discordId,
+        discord_username: discordUsername,
+        avatar_url: avatarUrl,
         created_at: createdAt
     });
-    return { id, email, name, passwordHash, createdAt: new Date(createdAt) };
+    return {
+        id,
+        email,
+        name,
+        discordId,
+        discordUsername,
+        avatarUrl,
+        passwordHash,
+        createdAt: new Date(createdAt)
+    };
 }
 
 function getUserByEmail(email) {
@@ -185,6 +229,33 @@ function getUserByEmail(email) {
 
 function getUserById(id) {
     return mapUserRow(statements.getUserById.get(id));
+}
+
+function findByDiscordId(discordId) {
+    return mapUserRow(statements.getUserByDiscordId.get(discordId));
+}
+
+function updateDiscordProfile(userId, { discordId, discordUsername, avatarUrl, email }) {
+    statements.updateDiscordProfile.run({
+        id: userId,
+        discord_id: discordId,
+        discord_username: discordUsername,
+        avatar_url: avatarUrl,
+        email: email ?? null
+    });
+    return getUserById(userId);
+}
+
+function createFromDiscord({ id, email, passwordHash, name, discordId, discordUsername, avatarUrl }) {
+    return createUser({
+        id,
+        email,
+        passwordHash,
+        name,
+        discordId,
+        discordUsername,
+        avatarUrl
+    });
 }
 
 function createBot(config) {
@@ -309,6 +380,9 @@ module.exports = {
     createUser,
     getUserByEmail,
     getUserById,
+    findByDiscordId,
+    updateDiscordProfile,
+    createFromDiscord,
     createBot,
     listBotsByUser,
     listAllBots,

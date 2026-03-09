@@ -23,6 +23,10 @@
         .auth-box input:focus{outline:none;border-color:var(--accent)}
         .auth-box .btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:24px;font-family:inherit}
         .auth-box .btn:hover{background:var(--accent-dark)}
+        .auth-box .discord-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border-radius:8px;background:#5865F2;color:#fff;font-size:14px;font-weight:700;text-decoration:none}
+        .auth-box .discord-btn:hover{background:#4752C4}
+        .auth-box .oauth-divider{display:flex;align-items:center;gap:12px;color:var(--gray);font-size:12px;margin:18px 0}
+        .auth-box .oauth-divider::before,.auth-box .oauth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
         .auth-box .switch{text-align:center;margin-top:16px;font-size:13px;color:var(--gray)}
         .auth-box .switch a{color:var(--accent-light);cursor:pointer;text-decoration:none}
         .auth-error{color:var(--red);font-size:13px;margin-top:8px;text-align:center;display:none}
@@ -196,6 +200,9 @@
     <div class="auth-box">
         <h1>⚡ Bot<span>Forge</span></h1>
         <p class="tagline">Deploy AI bots to Discord in one click</p>
+
+        <a class="discord-btn" href="/api/auth/discord">👾 Login with Discord</a>
+        <div class="oauth-divider"><span>or</span></div>
         
         <div id="loginForm">
             <label>Email</label>
@@ -953,9 +960,22 @@ function decodeToken(tokenValue) {
     }
 }
 
+function applyTokenFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (!urlToken) return;
+
+    token = urlToken;
+    localStorage.setItem('bf_token', urlToken);
+    params.delete('token');
+    const cleanPath = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
+    window.history.replaceState({}, document.title, cleanPath);
+}
+
 // ============ INIT ============
 
 (async () => {
+    applyTokenFromUrl();
     if (token) {
         try {
             const res = await fetch(`${API}/bots`, { headers: { 'Authorization': `Bearer ${token}` } });

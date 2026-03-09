@@ -11,6 +11,7 @@ const bcrypt = require('bcryptjs');
 const { BotManager } = require('../engine/BotManager');
 const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser } = require('../middleware/security');
 const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
+const { buildDiscordAuthUrl, getDiscordRedirectUri, handleDiscordCallback } = require('../auth/discord-oauth');
 const {
     validateRegister,
     validateLogin,
@@ -90,6 +91,41 @@ app.post('/api/auth/login', authRateLimiter, validateLogin, async (req, res) => 
         res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/auth/discord', (req, res) => {
+    try {
+        const clientId = process.env.DISCORD_CLIENT_ID;
+        if (!clientId) return res.status(500).json({ error: 'Discord OAuth not configured' });
+
+        const authUrl = buildDiscordAuthUrl({
+            clientId,
+            redirectUri: getDiscordRedirectUri()
+        });
+        res.redirect(authUrl);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/auth/discord/callback', async (req, res) => {
+    try {
+        if (req.query.error) {
+            return res.status(400).send(`Discord OAuth error: ${req.query.error}`);
+        }
+
+        const { token } = await handleDiscordCallback({
+            code: req.query.code,
+            clientId: process.env.DISCORD_CLIENT_ID,
+            clientSecret: process.env.DISCORD_CLIENT_SECRET,
+            redirectUri: getDiscordRedirectUri(),
+            jwtSecret: JWT_SECRET
+        });
+
+        res.redirect(`/dashboard?token=${encodeURIComponent(token)}`);
+    } catch (err) {
+        res.status(500).send(`Discord OAuth failed: ${err.message}`);
     }
 });
 
