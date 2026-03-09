@@ -9,6 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { BotManager } = require('../engine/BotManager');
+const { personalityPresets } = require('../engine/PersonalityPresets');
 const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser } = require('../middleware/security');
 const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
 const { buildDiscordAuthUrl, getDiscordRedirectUri, handleDiscordCallback } = require('../auth/discord-oauth');
@@ -142,6 +143,18 @@ function auth(req, res, next) {
         res.status(401).json({ error: 'Invalid token' });
     }
 }
+
+// ============ TEMPLATES ============
+
+app.get('/api/templates', (req, res) => {
+    res.json({ templates: personalityPresets });
+});
+
+app.get('/api/templates/:id', (req, res) => {
+    const template = personalityPresets.find((item) => item.id === req.params.id);
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+    res.json({ template });
+});
 
 // ============ BOTS ============
 
