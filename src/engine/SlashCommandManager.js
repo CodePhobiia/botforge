@@ -108,15 +108,22 @@ class SlashCommandManager {
         this.client = null;
         this.applicationId = null;
         this.commandCache = new Map();
-        this.rest = new REST({ version: '10' });
-        if (bot?.discordToken) {
-            this.rest.setToken(bot.discordToken);
+        this._rest = null;
+    }
+
+    get rest() {
+        if (!this._rest) {
+            this._rest = new REST({ version: '10' });
+            if (this.bot?.discordToken) {
+                this._rest.setToken(this.bot.discordToken);
+            }
         }
+        return this._rest;
     }
 
     updateFromBot() {
-        if (this.bot?.discordToken) {
-            this.rest.setToken(this.bot.discordToken);
+        if (this.bot?.discordToken && this._rest) {
+            this._rest.setToken(this.bot.discordToken);
         }
     }
 
