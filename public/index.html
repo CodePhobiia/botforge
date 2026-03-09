@@ -309,6 +309,49 @@
         .switch input:checked + .slider{background:rgba(16,185,129,0.6)}
         .switch input:checked + .slider:before{transform:translateX(20px)}
 
+        /* Webhooks */
+        .webhook-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:14px}
+        .webhook-card{background:#09090B;border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:12px;min-height:220px}
+        .webhook-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .webhook-card-title{font-size:11px;font-weight:700;color:var(--light);text-transform:uppercase;letter-spacing:0.8px}
+        .webhook-list{display:grid;gap:10px;max-height:260px;overflow-y:auto}
+        .webhook-item{background:#0B0B10;border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+        .webhook-meta{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+        .webhook-url{font-size:12px;color:var(--white);word-break:break-all}
+        .webhook-tags{display:flex;flex-wrap:wrap;gap:6px}
+        .webhook-tag{font-size:10px;padding:2px 6px;border-radius:999px;border:1px solid var(--border);color:var(--light);background:#09090B;text-transform:uppercase;letter-spacing:0.6px}
+        .webhook-secret{font-size:10px;color:var(--gray)}
+        .webhook-actions{display:flex;gap:6px;flex-wrap:wrap}
+        .webhook-actions .ghost-btn{padding:4px 8px;font-size:11px}
+        .webhook-actions .danger{border-color:rgba(239,68,68,0.4);color:var(--red)}
+        .webhook-actions .danger:hover{border-color:var(--red);color:var(--red)}
+        .webhook-form{display:flex;flex-direction:column;gap:12px}
+        .webhook-form label{display:block;font-size:11px;font-weight:600;color:var(--light);margin-bottom:4px}
+        .webhook-form input{width:100%;padding:8px 10px;background:#09090B;border:1px solid var(--border);border-radius:8px;color:var(--white);font-size:12px;font-family:inherit}
+        .webhook-events{display:flex;flex-wrap:wrap;gap:8px}
+        .webhook-events .toggle-pill span{padding:5px 10px;font-size:10px}
+        .webhook-hint{font-size:10px;color:var(--gray);margin-top:4px}
+
+        /* Admin */
+        .admin-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+        .admin-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
+        .admin-card .label{font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:0.8px}
+        .admin-card .value{font-size:24px;font-weight:800;margin-top:6px}
+        .admin-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px}
+        .admin-section-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+        .admin-section-header h4{font-size:14px;font-weight:700}
+        .admin-table{width:100%;border-collapse:collapse;font-size:12px}
+        .admin-table th,.admin-table td{padding:10px;border-bottom:1px solid var(--border);text-align:left;color:var(--light)}
+        .admin-table th{font-size:10px;text-transform:uppercase;letter-spacing:0.7px;color:var(--gray)}
+        .admin-table tr:hover td{background:#0B0B10}
+        .admin-tag{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:0.6px}
+        .admin-tag.running{border-color:rgba(16,185,129,0.4);color:var(--green);background:rgba(16,185,129,0.12)}
+        .admin-tag.stopped{border-color:rgba(239,68,68,0.4);color:var(--red);background:rgba(239,68,68,0.12)}
+        .admin-tag.error{border-color:rgba(239,68,68,0.4);color:var(--red);background:rgba(239,68,68,0.12)}
+        .admin-health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+        .admin-health-item{background:#0B0B10;border:1px solid var(--border);border-radius:12px;padding:12px;font-size:12px;color:var(--light)}
+        .admin-health-item strong{color:var(--white)}
+
         .detail-analytics-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
         .analytics-range{display:flex;gap:6px}
         .range-btn{background:#0B0B10;border:1px solid var(--border);color:var(--light);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
@@ -352,6 +395,8 @@
             .automod-grid{grid-template-columns:1fr}
             .slash-grid{grid-template-columns:1fr}
             .slash-option-row{grid-template-columns:1fr 1fr}
+            .webhook-grid{grid-template-columns:1fr}
+            .admin-stats{grid-template-columns:1fr 1fr}
         }
     </style>
 </head>
@@ -397,6 +442,7 @@
         <div class="nav-tabs">
             <button class="nav-tab active" data-page="bots" onclick="showPage('bots')">Bots</button>
             <button class="nav-tab" data-page="settings" onclick="showPage('settings')">Settings</button>
+            <button class="nav-tab" data-page="admin" id="adminNav" onclick="showPage('admin')" style="display:none">Admin</button>
         </div>
         <div class="user-info">
             <span class="user-name" id="userName"></span>
@@ -507,6 +553,89 @@
                     <div class="form-actions">
                         <button class="secondary-btn" onclick="showToast('2FA coming soon')">Enable 2FA</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page" id="adminPage">
+            <div class="admin-section">
+                <div class="admin-section-header">
+                    <h4>Platform Stats</h4>
+                    <button class="ghost-btn" onclick="refreshAdminData()">Refresh</button>
+                </div>
+                <div class="admin-stats">
+                    <div class="admin-card">
+                        <div class="label">Total Users</div>
+                        <div class="value" id="adminStatUsers">--</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="label">Total Bots</div>
+                        <div class="value" id="adminStatBots">--</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="label">Messages</div>
+                        <div class="value" id="adminStatMessages">--</div>
+                    </div>
+                    <div class="admin-card">
+                        <div class="label">Uptime</div>
+                        <div class="value" id="adminStatUptime">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <div class="admin-section-header">
+                    <h4>User Management</h4>
+                    <div class="detail-sub" id="adminUsersMeta">Loading…</div>
+                </div>
+                <div style="overflow-x:auto">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Discord</th>
+                                <th>Joined</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminUsersTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <div class="admin-section-header">
+                    <h4>Global Bot Overview</h4>
+                    <div class="detail-sub" id="adminBotsMeta">Loading…</div>
+                </div>
+                <div style="overflow-x:auto">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Bot</th>
+                                <th>Owner</th>
+                                <th>Status</th>
+                                <th>Provider</th>
+                                <th>Model</th>
+                                <th>Messages</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminBotsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <div class="admin-section-header">
+                    <h4>System Health</h4>
+                    <div class="detail-sub" id="adminHealthMeta">Loading…</div>
+                </div>
+                <div class="admin-health-grid">
+                    <div class="admin-health-item"><strong>Status:</strong> <span id="adminHealthStatus">--</span></div>
+                    <div class="admin-health-item"><strong>Version:</strong> <span id="adminHealthVersion">--</span></div>
+                    <div class="admin-health-item"><strong>Uptime:</strong> <span id="adminHealthUptime">--</span></div>
+                    <div class="admin-health-item"><strong>Bots Running:</strong> <span id="adminHealthBotsRunning">--</span></div>
                 </div>
             </div>
         </div>
@@ -915,6 +1044,54 @@
                     <div class="schedule-preview" id="schedulePreview">Schedule preview will appear here.</div>
                 </div>
             </div>
+            <div class="detail-section full" id="webhookSection">
+                <div class="detail-section-header">
+                    <h4>Webhooks</h4>
+                    <button class="ghost-btn" onclick="refreshWebhooks()">Refresh</button>
+                </div>
+                <div class="webhook-grid">
+                    <div class="webhook-card">
+                        <div class="webhook-card-header">
+                            <div class="webhook-card-title">Configured Webhooks</div>
+                            <div class="detail-sub" id="webhookMeta">Loading…</div>
+                        </div>
+                        <div class="webhook-list" id="webhookList"></div>
+                    </div>
+                    <div class="webhook-card">
+                        <div class="webhook-card-header">
+                            <div class="webhook-card-title">Webhook Builder</div>
+                            <div class="slash-pill" id="webhookFormBadge">New</div>
+                        </div>
+                        <div class="webhook-form" id="webhookForm">
+                            <div>
+                                <label>Webhook URL</label>
+                                <input type="url" id="webhookUrl" placeholder="https://example.com/webhooks/botforge">
+                                <div class="webhook-hint">We send a test ping before saving.</div>
+                            </div>
+                            <div>
+                                <label>Events</label>
+                                <div class="webhook-events" id="webhookEvents"></div>
+                            </div>
+                            <div>
+                                <label>Signing Secret (HMAC)</label>
+                                <input type="text" id="webhookSecret" placeholder="Leave blank to auto-generate">
+                                <div class="webhook-hint">Used to sign payloads with SHA-256.</div>
+                            </div>
+                            <div>
+                                <label>Enabled</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="webhookEnabled" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="webhook-actions">
+                                <button class="secondary-btn" onclick="resetWebhookForm()">Reset</button>
+                                <button class="primary-btn" onclick="saveWebhook()">Save Webhook</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="detail-section full" id="automodSection">
                 <div class="detail-section-header">
                     <h4>Auto-Mod</h4>
@@ -1061,6 +1238,21 @@ let slashCommandState = {
     loading: false,
     editingId: null
 };
+let webhookState = {
+    botId: null,
+    items: [],
+    loading: false,
+    editingId: null
+};
+let isAdmin = false;
+let adminState = {
+    stats: null,
+    users: [],
+    bots: [],
+    health: null,
+    loading: false
+};
+let adminRefreshInterval = null;
 
 const DEFAULT_AUTOMOD_CONFIG = {
     defaultAction: 'warn',
@@ -1086,6 +1278,15 @@ const SLASH_OPTION_TYPES = [
     { value: 'user', label: 'User' },
     { value: 'channel', label: 'Channel' },
     { value: 'role', label: 'Role' }
+];
+
+const WEBHOOK_EVENT_OPTIONS = [
+    { id: 'bot_started', label: 'Bot Started' },
+    { id: 'bot_stopped', label: 'Bot Stopped' },
+    { id: 'bot_error', label: 'Bot Error' },
+    { id: 'message_received', label: 'Message Received' },
+    { id: 'automod_action', label: 'AutoMod Action' },
+    { id: 'schedule_event', label: 'Schedule Event' }
 ];
 
 const onboardingSteps = [
@@ -1194,10 +1395,15 @@ function logout() {
     currentBots = [];
     localStorage.removeItem('bf_token');
     if (refreshInterval) clearInterval(refreshInterval);
+    if (adminRefreshInterval) clearInterval(adminRefreshInterval);
     if (socket) {
         socket.disconnect();
         socket = null;
     }
+    isAdmin = false;
+    adminState = { stats: null, users: [], bots: [], health: null, loading: false };
+    const adminNav = document.getElementById('adminNav');
+    if (adminNav) adminNav.style.display = 'none';
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('dashboard').style.display = 'none';
     closeBotDetail();
@@ -1205,13 +1411,22 @@ function logout() {
 
 // ============ DASHBOARD ============
 
-function showPage(page) {
+function showPage(page, { skipRoute = false } = {}) {
+    if (page === 'admin' && !isAdmin) {
+        page = 'bots';
+    }
     activePage = page;
     document.getElementById('botsPage').classList.toggle('active', page === 'bots');
     document.getElementById('settingsPage').classList.toggle('active', page === 'settings');
+    const adminPage = document.getElementById('adminPage');
+    if (adminPage) adminPage.classList.toggle('active', page === 'admin');
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.page === page);
     });
+    if (!skipRoute) updateDashboardRoute(page);
+    if (page === 'admin') {
+        loadAdminData();
+    }
 }
 
 function dismissOnboarding() {
@@ -1320,13 +1535,20 @@ async function showDashboard() {
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     if (currentUser) document.getElementById('userName').textContent = currentUser.name || currentUser.email;
-    showPage('bots');
     updateSettings(currentBots);
     bindScheduleEvents();
     loadTemplates();
     await refreshBots();
+    await checkAdminAccess();
+    showPage(getPageFromPath());
     initSocket();
     refreshInterval = setInterval(refreshBots, 5000);
+    if (isAdmin) {
+        if (adminRefreshInterval) clearInterval(adminRefreshInterval);
+        adminRefreshInterval = setInterval(() => {
+            if (activePage === 'admin') loadAdminData({ silent: true });
+        }, 15000);
+    }
 }
 
 async function refreshBots() {
@@ -1340,6 +1562,122 @@ async function refreshBots() {
     }
 }
 
+function updateDashboardRoute(page) {
+    const base = '/dashboard';
+    let target = base;
+    if (page === 'settings') target = '/dashboard/settings';
+    if (page === 'admin') target = '/dashboard/admin';
+    if (window.location.pathname !== target) {
+        window.history.pushState({}, document.title, target);
+    }
+}
+
+function getPageFromPath() {
+    const path = window.location.pathname || '';
+    if (path.includes('/dashboard/admin')) return isAdmin ? 'admin' : 'bots';
+    if (path.includes('/dashboard/settings')) return 'settings';
+    return 'bots';
+}
+
+function updateAdminNav() {
+    const adminNav = document.getElementById('adminNav');
+    if (adminNav) {
+        adminNav.style.display = isAdmin ? 'inline-flex' : 'none';
+    }
+}
+
+async function checkAdminAccess() {
+    if (!token) {
+        isAdmin = false;
+        updateAdminNav();
+        return false;
+    }
+    try {
+        const res = await fetch(`${API}/admin/stats`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.status === 401) { logout(); return false; }
+        if (res.status === 403) {
+            isAdmin = false;
+            updateAdminNav();
+            return false;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Admin check failed');
+        isAdmin = true;
+        adminState.stats = data.stats || null;
+        updateAdminNav();
+        renderAdminStats();
+        return true;
+    } catch (err) {
+        isAdmin = false;
+        updateAdminNav();
+        return false;
+    }
+}
+
+function refreshAdminData() {
+    if (!isAdmin) return;
+    loadAdminData();
+}
+
+async function fetchAdminJson(url) {
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.status === 401) { logout(); return null; }
+    if (res.status === 403) {
+        isAdmin = false;
+        updateAdminNav();
+        showPage('bots');
+        return null;
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Admin request failed');
+    return data;
+}
+
+async function fetchPublicJson(url) {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+}
+
+async function loadAdminData({ silent = false } = {}) {
+    if (!isAdmin) return;
+    adminState.loading = true;
+
+    if (!silent) {
+        renderAdminStats();
+        renderAdminUsers();
+        renderAdminBots();
+        renderAdminHealth();
+    }
+
+    const [statsResult, usersResult, botsResult, healthResult] = await Promise.allSettled([
+        fetchAdminJson(`${API}/admin/stats`),
+        fetchAdminJson(`${API}/admin/users`),
+        fetchAdminJson(`${API}/admin/bots`),
+        fetchPublicJson(`${API}/health`)
+    ]);
+
+    if (statsResult.status === 'fulfilled' && statsResult.value) {
+        adminState.stats = statsResult.value.stats || null;
+    }
+    if (usersResult.status === 'fulfilled' && usersResult.value) {
+        adminState.users = Array.isArray(usersResult.value.users) ? usersResult.value.users : [];
+    }
+    if (botsResult.status === 'fulfilled' && botsResult.value) {
+        adminState.bots = Array.isArray(botsResult.value.bots) ? botsResult.value.bots : [];
+    }
+    if (healthResult.status === 'fulfilled' && healthResult.value) {
+        adminState.health = healthResult.value || null;
+    }
+
+    adminState.loading = false;
+    renderAdminStats();
+    renderAdminUsers();
+    renderAdminBots();
+    renderAdminHealth();
+}
+
 function updateStatsFromBots(bots) {
     let totalServers = 0, totalMessages = 0, running = 0;
     bots.forEach(b => {
@@ -1351,6 +1689,133 @@ function updateStatsFromBots(bots) {
     document.getElementById('statRunning').textContent = running;
     document.getElementById('statServers').textContent = totalServers;
     document.getElementById('statMessages').textContent = totalMessages;
+}
+
+function formatDuration(seconds) {
+    if (!Number.isFinite(seconds)) return '--';
+    const total = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+}
+
+function formatAdminDate(value) {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString();
+}
+
+function renderAdminStats() {
+    const stats = adminState.stats;
+    const usersEl = document.getElementById('adminStatUsers');
+    const botsEl = document.getElementById('adminStatBots');
+    const messagesEl = document.getElementById('adminStatMessages');
+    const uptimeEl = document.getElementById('adminStatUptime');
+
+    if (!stats) {
+        if (usersEl) usersEl.textContent = '--';
+        if (botsEl) botsEl.textContent = '--';
+        if (messagesEl) messagesEl.textContent = '--';
+        if (uptimeEl) uptimeEl.textContent = '--';
+        return;
+    }
+
+    if (usersEl) usersEl.textContent = stats.totalUsers ?? '--';
+    if (botsEl) botsEl.textContent = stats.totalBots ?? '--';
+    if (messagesEl) messagesEl.textContent = stats.totalMessages ?? '--';
+    if (uptimeEl) uptimeEl.textContent = formatDuration(stats.uptime);
+}
+
+function renderAdminUsers() {
+    const body = document.getElementById('adminUsersTable');
+    const meta = document.getElementById('adminUsersMeta');
+    if (!body) return;
+
+    if (adminState.loading && adminState.users.length === 0) {
+        body.innerHTML = '<tr><td colspan="4">Loading users…</td></tr>';
+        if (meta) meta.textContent = 'Loading…';
+        return;
+    }
+
+    if (!adminState.users.length) {
+        body.innerHTML = '<tr><td colspan="4">No users found.</td></tr>';
+        if (meta) meta.textContent = '0 users';
+        return;
+    }
+
+    body.innerHTML = adminState.users.map((user) => {
+        const discordLabel = user.discordUsername ? `${user.discordUsername}` : '—';
+        return `
+            <tr>
+                <td>${esc(user.name || 'User')}</td>
+                <td>${esc(user.email || '')}</td>
+                <td>${esc(discordLabel)}</td>
+                <td>${esc(formatAdminDate(user.createdAt))}</td>
+            </tr>
+        `;
+    }).join('');
+    if (meta) meta.textContent = `${adminState.users.length} user(s)`;
+}
+
+function renderAdminBots() {
+    const body = document.getElementById('adminBotsTable');
+    const meta = document.getElementById('adminBotsMeta');
+    if (!body) return;
+
+    if (adminState.loading && adminState.bots.length === 0) {
+        body.innerHTML = '<tr><td colspan="7">Loading bots…</td></tr>';
+        if (meta) meta.textContent = 'Loading…';
+        return;
+    }
+
+    if (!adminState.bots.length) {
+        body.innerHTML = '<tr><td colspan="7">No bots found.</td></tr>';
+        if (meta) meta.textContent = '0 bots';
+        return;
+    }
+
+    body.innerHTML = adminState.bots.map((bot) => {
+        const status = (bot.status || 'stopped').toLowerCase();
+        const owner = bot.userEmail || '—';
+        return `
+            <tr>
+                <td>${esc(bot.name || 'Bot')}</td>
+                <td>${esc(owner)}</td>
+                <td><span class="admin-tag ${status}">${esc(status)}</span></td>
+                <td>${esc(bot.aiProvider || 'openai')}</td>
+                <td>${esc(bot.model || 'gpt-4o-mini')}</td>
+                <td>${esc((bot.messageCount || 0).toString())}</td>
+                <td>${esc(formatAdminDate(bot.createdAt))}</td>
+            </tr>
+        `;
+    }).join('');
+    if (meta) meta.textContent = `${adminState.bots.length} bot(s)`;
+}
+
+function renderAdminHealth() {
+    const health = adminState.health;
+    const statusEl = document.getElementById('adminHealthStatus');
+    const versionEl = document.getElementById('adminHealthVersion');
+    const uptimeEl = document.getElementById('adminHealthUptime');
+    const botsEl = document.getElementById('adminHealthBotsRunning');
+    const metaEl = document.getElementById('adminHealthMeta');
+
+    if (!health) {
+        if (statusEl) statusEl.textContent = '--';
+        if (versionEl) versionEl.textContent = '--';
+        if (uptimeEl) uptimeEl.textContent = '--';
+        if (botsEl) botsEl.textContent = '--';
+        if (metaEl) metaEl.textContent = adminState.loading ? 'Loading…' : 'No health data';
+        return;
+    }
+
+    if (statusEl) statusEl.textContent = health.status || 'unknown';
+    if (versionEl) versionEl.textContent = health.version || '--';
+    if (uptimeEl) uptimeEl.textContent = formatDuration(health.uptime);
+    if (botsEl) botsEl.textContent = health.bots_running ?? '--';
+    if (metaEl) metaEl.textContent = 'Live system status';
 }
 
 function renderBots(bots) {
@@ -1913,6 +2378,7 @@ function closeBotDetail() {
     resetScheduleState(null);
     resetAutomodState(null);
     resetSlashCommandState(null);
+    resetWebhookState(null);
     if (analyticsChart) {
         analyticsChart.destroy();
         analyticsChart = null;
@@ -1964,6 +2430,8 @@ function renderBotDetail(bot) {
     loadAutomodLogs({ reset: true });
     resetSlashCommandState(bot.id);
     loadSlashCommands(bot.id);
+    resetWebhookState(bot.id);
+    loadWebhooks(bot.id);
 }
 
 // ============ CONVERSATION LOGS ============
@@ -2437,6 +2905,231 @@ async function syncSlashCommands() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Sync failed');
         showToast('Slash commands synced ✅');
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+// ============ WEBHOOKS ============
+
+function resetWebhookState(botId) {
+    webhookState.botId = botId;
+    webhookState.items = [];
+    webhookState.loading = false;
+    webhookState.editingId = null;
+    resetWebhookForm();
+    renderWebhookList();
+}
+
+function renderWebhookEventOptions(selected = []) {
+    const container = document.getElementById('webhookEvents');
+    if (!container) return;
+    const selectedSet = new Set(selected);
+    container.innerHTML = WEBHOOK_EVENT_OPTIONS.map((event) => `
+        <label class="toggle-pill">
+            <input type="checkbox" value="${event.id}" ${selectedSet.has(event.id) ? 'checked' : ''}>
+            <span>${event.label}</span>
+        </label>
+    `).join('');
+}
+
+function getSelectedWebhookEvents() {
+    return Array.from(document.querySelectorAll('#webhookEvents input[type="checkbox"]:checked'))
+        .map((input) => input.value);
+}
+
+function resetWebhookForm() {
+    webhookState.editingId = null;
+    const urlInput = document.getElementById('webhookUrl');
+    const secretInput = document.getElementById('webhookSecret');
+    const enabledInput = document.getElementById('webhookEnabled');
+    if (urlInput) urlInput.value = '';
+    if (secretInput) secretInput.value = '';
+    if (enabledInput) enabledInput.checked = true;
+    renderWebhookEventOptions(WEBHOOK_EVENT_OPTIONS.map((event) => event.id));
+    const badge = document.getElementById('webhookFormBadge');
+    if (badge) badge.textContent = 'New';
+}
+
+async function loadWebhooks(botId) {
+    if (!botId) return;
+    webhookState.loading = true;
+    renderWebhookList();
+    try {
+        const res = await fetch(`${API}/bots/${botId}/webhooks`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load webhooks');
+        webhookState.items = Array.isArray(data.webhooks) ? data.webhooks : [];
+    } catch (err) {
+        console.error('Failed to load webhooks:', err);
+        showToast('Error: ' + err.message, 'error');
+    }
+    webhookState.loading = false;
+    renderWebhookList();
+}
+
+function refreshWebhooks() {
+    if (!activeDetailBotId) return;
+    loadWebhooks(activeDetailBotId);
+}
+
+function renderWebhookList() {
+    const listEl = document.getElementById('webhookList');
+    const metaEl = document.getElementById('webhookMeta');
+    if (!listEl) return;
+
+    if (webhookState.loading && webhookState.items.length === 0) {
+        listEl.innerHTML = '<div class="empty-log">Loading webhooks…</div>';
+        if (metaEl) metaEl.textContent = 'Loading…';
+        return;
+    }
+
+    if (!webhookState.items.length) {
+        listEl.innerHTML = '<div class="empty-log">No webhooks configured.</div>';
+        if (metaEl) metaEl.textContent = '0 webhooks';
+        return;
+    }
+
+    listEl.innerHTML = webhookState.items.map((hook) => {
+        const eventTags = (hook.events || []).map((event) => {
+            const label = WEBHOOK_EVENT_OPTIONS.find(opt => opt.id === event)?.label || event;
+            return `<span class="webhook-tag">${esc(label)}</span>`;
+        }).join('');
+        const secretLabel = hook.secret ? `Secret: ${hook.secret}` : 'Secret: auto';
+        return `
+            <div class="webhook-item">
+                <div class="webhook-meta">
+                    <div class="webhook-url">${esc(hook.url || '')}</div>
+                    <label class="switch">
+                        <input type="checkbox" ${hook.enabled ? 'checked' : ''} onchange="toggleWebhookEnabled('${hook.id}', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="webhook-tags">${eventTags || '<span class="webhook-tag">No events</span>'}</div>
+                <div class="webhook-secret">${esc(secretLabel)}</div>
+                <div class="webhook-actions">
+                    <button class="ghost-btn" onclick="editWebhook('${hook.id}')">Edit</button>
+                    <button class="ghost-btn" onclick="testWebhook('${hook.id}')">Test</button>
+                    <button class="ghost-btn danger" onclick="deleteWebhook('${hook.id}', '${esc(hook.url || '')}')">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (metaEl) metaEl.textContent = `${webhookState.items.length} webhook(s)`;
+}
+
+function editWebhook(id) {
+    const hook = webhookState.items.find(item => item.id === id);
+    if (!hook) {
+        showToast('Webhook not found', 'error');
+        return;
+    }
+    webhookState.editingId = hook.id;
+    const urlInput = document.getElementById('webhookUrl');
+    const secretInput = document.getElementById('webhookSecret');
+    const enabledInput = document.getElementById('webhookEnabled');
+    if (urlInput) urlInput.value = hook.url || '';
+    if (secretInput) secretInput.value = hook.secret || '';
+    if (enabledInput) enabledInput.checked = hook.enabled !== false;
+    renderWebhookEventOptions(Array.isArray(hook.events) ? hook.events : []);
+    const badge = document.getElementById('webhookFormBadge');
+    if (badge) badge.textContent = 'Editing';
+}
+
+async function saveWebhook() {
+    if (!activeDetailBotId) return;
+    const url = document.getElementById('webhookUrl')?.value.trim() || '';
+    const secret = document.getElementById('webhookSecret')?.value.trim() || '';
+    const enabled = Boolean(document.getElementById('webhookEnabled')?.checked);
+    const events = getSelectedWebhookEvents();
+
+    if (!url) {
+        showToast('Webhook URL is required', 'error');
+        return;
+    }
+    if (!events.length) {
+        showToast('Select at least one event', 'error');
+        return;
+    }
+
+    const payload = { url, events, enabled };
+    if (secret) payload.secret = secret;
+
+    const isEdit = Boolean(webhookState.editingId);
+    const endpoint = isEdit
+        ? `${API}/bots/${activeDetailBotId}/webhooks/${webhookState.editingId}`
+        : `${API}/bots/${activeDetailBotId}/webhooks`;
+
+    try {
+        const res = await fetch(endpoint, {
+            method: isEdit ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(payload)
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save webhook');
+        showToast(isEdit ? 'Webhook updated ✅' : 'Webhook created ✅');
+        resetWebhookForm();
+        await loadWebhooks(activeDetailBotId);
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function toggleWebhookEnabled(id, enabled) {
+    if (!activeDetailBotId) return;
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/webhooks/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ enabled })
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update webhook');
+        const index = webhookState.items.findIndex(item => item.id === id);
+        if (index !== -1) webhookState.items[index] = data.webhook;
+        renderWebhookList();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+        renderWebhookList();
+    }
+}
+
+async function testWebhook(id) {
+    if (!activeDetailBotId) return;
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/webhooks/${id}/test`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Webhook test failed');
+        showToast('Webhook test sent ✅');
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function deleteWebhook(id, urlLabel) {
+    if (!activeDetailBotId) return;
+    if (!confirm(`Delete webhook for ${urlLabel}?`)) return;
+    try {
+        const res = await fetch(`${API}/bots/${activeDetailBotId}/webhooks/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Delete failed');
+        showToast('Webhook deleted ✅');
+        await loadWebhooks(activeDetailBotId);
     } catch (err) {
         showToast('Error: ' + err.message, 'error');
     }
@@ -3305,6 +3998,10 @@ function applyTokenFromUrl() {
 }
 
 // ============ INIT ============
+
+window.addEventListener('popstate', () => {
+    showPage(getPageFromPath(), { skipRoute: true });
+});
 
 (async () => {
     applyTokenFromUrl();
