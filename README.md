@@ -1,105 +1,137 @@
-# **⚡ BotForge**
+<div align="center">
+  <img src="https://placehold.co/140x140?text=BotForge" alt="BotForge logo" width="120" height="120" />
+  <h1>BotForge</h1>
+  <p><strong>Ship AI-powered Discord bots in minutes.</strong></p>
+  <p>Secure multi-bot control plane with OAuth, encrypted secrets, and live ops visibility.</p>
 
-Deploy AI Discord bots in one click with a secure, multi-bot control plane for teams.
+  [![Node.js](https://img.shields.io/badge/node-18%2B-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
+  [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+  [![Docker](https://img.shields.io/badge/docker-ready-0db7ed?logo=docker&logoColor=white)](https://www.docker.com/)
 
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-![Node](https://img.shields.io/badge/node-22.x-43853d?logo=node.js&logoColor=white)
-![Docker](https://img.shields.io/badge/docker-ready-0db7ed?logo=docker&logoColor=white)
+  [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/...)
+</div>
+
+---
 
 ## Features
 - 🤖 Multi-bot management from a single dashboard
-- 🧠 Any AI model/provider with flexible configuration
-- 🔐 BYOK (bring your own keys) with encrypted secrets
-- 📊 Real-time dashboard for status, logs, and health
-- 🧰 Tools system for web search and utilities
-- 🤝 Collaboration modes for team-built bots
-- 🎛️ Personality presets and trigger modes
+- 🧠 Bring any AI provider (OpenAI, Anthropic, etc.)
+- 🔐 Encrypted secrets stored in SQLite
+- 📊 Live status, logs, and health metrics
+- 🧰 Tool system for web + utility actions
+- 🤝 Collaboration modes across bot fleets
+- 🎛️ Presets for personalities and triggers
 
 ## Quick Start
-1. Clone the repo
-   ```bash
-   git clone https://github.com/CodePhobiia/botforge.git
-   cd botforge
-   ```
-2. Install dependencies
+
+### Local
+1. Install dependencies:
    ```bash
    npm install
    ```
-3. Start the server
-   ```bash
-   npm start
-   ```
-
-## Installation
-### Prerequisites
-- Node.js 22+
-- A Discord bot token
-- An AI provider API key (OpenAI, Anthropic, or custom)
-
-### Local Setup
-1. Copy the environment file:
+2. Copy env template and fill values:
    ```bash
    cp .env.example .env
    ```
-2. Set values in `.env`.
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-4. Start the API server:
+3. Start the server:
    ```bash
    npm start
    ```
-5. Open the dashboard at `http://localhost:3000/dashboard`.
+4. Open the dashboard at `http://localhost:3000/dashboard`.
 
 ### Docker
 ```bash
 docker compose up --build
 ```
 
-## Configuration Reference
+### Railway (One-Click)
+1. Click the deploy button above.
+2. Add required environment variables in Railway.
+3. Deploy and open the provided public URL.
+
+## Architecture
+```
+┌───────────────────────────┐
+│        Web Client         │
+│  /public (dashboard UI)   │
+└──────────────┬────────────┘
+               │
+               ▼
+┌───────────────────────────┐
+│        API Server         │
+│  src/api/server.js        │
+│  - auth, bots, templates  │
+└──────────────┬────────────┘
+               │
+               ▼
+┌───────────────────────────┐
+│       Bot Manager         │
+│  src/engine/BotManager.js │
+│  - lifecycle, health      │
+└──────────────┬────────────┘
+               │
+               ▼
+┌───────────────────────────┐
+│       SQLite Store        │
+│  data/botforge.db         │
+│  (encrypted secrets)      │
+└───────────────────────────┘
+```
+
+## API Documentation
+Base URL: `http://localhost:3000`
+
+Authentication: send `Authorization: Bearer <token>` on protected endpoints.
+
+### Health
+- `GET /api/health` — Service status + uptime
+
+### Auth
+- `POST /api/auth/register` — Create a new user account
+- `POST /api/auth/login` — Log in and receive a JWT
+- `GET /api/auth/discord` — Start Discord OAuth
+- `GET /api/auth/discord/callback` — OAuth redirect handler
+
+### Templates
+- `GET /api/templates` — List personality presets
+- `GET /api/templates/:id` — Fetch a preset by id
+
+### Bots (Protected)
+- `GET /api/bots` — List bots for the authenticated user
+- `POST /api/bots` — Create a new bot
+- `PUT /api/bots/:id` — Update a bot configuration
+- `DELETE /api/bots/:id` — Delete a bot
+- `POST /api/bots/:id/start` — Start a bot
+- `POST /api/bots/:id/stop` — Stop a bot
+- `GET /api/bots/:id/status` — Get live status
+- `GET /api/bots/:id/logs` — Get bot message logs
+- `GET /api/bots/:id/health` — Get health metrics
+- `POST /api/bots/:id/tools` — Update enabled tools
+- `GET /api/bots/:id/conversations` — Fetch conversation history by channel
+
+### Platform
+- `GET /api/stats` — Aggregate platform stats
+
+## Environment Variables
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `PORT` | No | `3000` | API server port. |
-| `JWT_SECRET` | Yes | - | Secret used to sign auth tokens. |
-| `ENCRYPTION_KEY` | Recommended | - | Master key for encrypting stored secrets. If omitted, a `.botforge-key` file is created on first run and must be persisted. |
+| `NODE_ENV` | No | `development` | Runtime environment. |
+| `JWT_SECRET` | Yes (prod) | Ephemeral | Secret used to sign auth tokens. |
+| `DISCORD_CLIENT_ID` | No | - | Discord OAuth client id. |
+| `DISCORD_CLIENT_SECRET` | No | - | Discord OAuth client secret. |
+| `DISCORD_REDIRECT_URI` | No | `http://localhost:3000/api/auth/discord/callback` | OAuth redirect URL. |
+| `ENCRYPTION_KEY` | Recommended | Auto | Master key for encrypting stored secrets. |
+| `CORS_ORIGINS` | Recommended (prod) | - | Comma-separated list of allowed origins. |
 
-## API Docs
-Base URL: `http://localhost:3000`
-
-Authentication: send `Authorization: Bearer <token>` on all protected endpoints.
-
-### Auth
-- `POST /api/auth/register` - Create a new user account.
-- `POST /api/auth/login` - Log in and receive a JWT.
-
-### Bots
-- `GET /api/bots` - List bots for the authenticated user.
-- `POST /api/bots` - Create a new bot.
-- `PUT /api/bots/:id` - Update a bot configuration.
-- `DELETE /api/bots/:id` - Delete a bot.
-- `POST /api/bots/:id/start` - Start a bot.
-- `POST /api/bots/:id/stop` - Stop a bot.
-- `GET /api/bots/:id/status` - Get live status.
-- `GET /api/bots/:id/logs` - Get bot message logs.
-- `GET /api/bots/:id/health` - Get health metrics.
-- `POST /api/bots/:id/tools` - Update enabled tools.
-- `GET /api/bots/:id/conversations` - Fetch conversation history by channel.
-
-### Platform
-- `GET /api/stats` - Aggregate platform stats.
-
-## Architecture Overview
-- `src/api/server.js` exposes the REST API and serves the dashboard.
-- `src/engine/BotManager.js` orchestrates bot lifecycles and runtime status.
-- `src/engine/AIProvider.js` and `ToolSystem.js` handle model calls and tool routing.
-- `src/db/` manages a SQLite database in `data/` with encrypted tokens.
-- `public/` contains the dashboard UI.
+Notes:
+- If `ENCRYPTION_KEY` is not set, a `.botforge-key` file is generated on first use and must be persisted.
+- In production, set `JWT_SECRET` and `CORS_ORIGINS` explicitly.
 
 ## Contributing
 1. Fork the repo and create a feature branch.
 2. Make your changes and add tests if needed.
-3. Open a pull request with a clear summary.
+3. Open a pull request with a clear summary and screenshots (if UI changes).
 
 ## License
-MIT © 2026 BotForge
+MIT © 2026 BotForge. See `LICENSE` for details.
