@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BotForge — Deploy AI Bots to Discord in One Click</title>
+    <meta name="description" content="Deploy AI-powered Discord bots in seconds. Bring your own API keys, configure personalities, and run multiple bots that work together.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--accent:#7C3AED;--accent-light:#A78BFA;--accent-dark:#5B21B6;--green:#10B981;--red:#EF4444;--yellow:#F59E0B;--bg:#09090B;--card:#18181B;--border:#27272A;--gray:#71717A;--light:#A1A1AA;--white:#FAFAFA}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);line-height:1.5;min-height:100vh}
+        .mono{font-family:'JetBrains Mono',monospace}
+
+        /* Auth Screen */
+        .auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+        .auth-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:420px}
+        .auth-box h1{font-size:28px;font-weight:900;margin-bottom:4px;text-align:center}
+        .auth-box h1 span{color:var(--accent)}
+        .auth-box .tagline{color:var(--gray);text-align:center;margin-bottom:32px;font-size:14px}
+        .auth-box label{display:block;font-size:12px;font-weight:600;color:var(--light);margin-bottom:4px;margin-top:16px}
+        .auth-box input{width:100%;padding:10px 14px;background:#09090B;border:1px solid var(--border);border-radius:8px;color:var(--white);font-size:14px;font-family:inherit}
+        .auth-box input:focus{outline:none;border-color:var(--accent)}
+        .auth-box .btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:24px;font-family:inherit}
+        .auth-box .btn:hover{background:var(--accent-dark)}
+        .auth-box .switch{text-align:center;margin-top:16px;font-size:13px;color:var(--gray)}
+        .auth-box .switch a{color:var(--accent-light);cursor:pointer;text-decoration:none}
+        .auth-error{color:var(--red);font-size:13px;margin-top:8px;text-align:center;display:none}
+
+        /* Dashboard */
+        .dashboard{display:none}
+        header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+        .logo{font-size:20px;font-weight:900}
+        .logo span{color:var(--accent)}
+        .user-info{display:flex;align-items:center;gap:12px}
+        .user-name{font-size:13px;color:var(--light)}
+        .logout-btn{background:none;border:1px solid var(--border);color:var(--light);padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit}
+        .logout-btn:hover{border-color:var(--red);color:var(--red)}
+
+        .main{max-width:1200px;margin:0 auto;padding:24px}
+
+        /* Stats Bar */
+        .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
+        .stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+        .stat-card .label{font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:1px}
+        .stat-card .value{font-size:28px;font-weight:800;margin-top:4px}
+        .stat-card .value.green{color:var(--green)}
+        .stat-card .value.accent{color:var(--accent)}
+        .stat-card .value.yellow{color:var(--yellow)}
+
+        /* Action Bar */
+        .action-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+        .action-bar h2{font-size:20px;font-weight:800}
+        .create-btn{background:var(--accent);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px}
+        .create-btn:hover{background:var(--accent-dark)}
+
+        /* Bot Cards */
+        .bots-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:16px}
+        .bot-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color 0.2s}
+        .bot-card:hover{border-color:var(--accent)}
+        .bot-header{display:flex;justify-content:space-between;align-items:start;margin-bottom:16px}
+        .bot-name{font-size:18px;font-weight:700}
+        .bot-status{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px}
+        .bot-status.running{background:rgba(16,185,129,0.15);color:var(--green)}
+        .bot-status.stopped{background:rgba(113,113,122,0.15);color:var(--gray)}
+        .bot-status.error{background:rgba(239,68,68,0.15);color:var(--red)}
+        .bot-status.starting{background:rgba(245,158,11,0.15);color:var(--yellow)}
+        .status-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+        
+        .bot-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+        .bot-meta-item{font-size:12px}
+        .bot-meta-item .meta-label{color:var(--gray)}
+        .bot-meta-item .meta-value{color:var(--light);font-family:'JetBrains Mono',monospace;font-size:11px}
+
+        .bot-personality{font-size:12px;color:var(--gray);margin-bottom:16px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.6;background:#09090B;padding:8px 12px;border-radius:6px;font-style:italic}
+
+        .bot-servers{margin-bottom:16px}
+        .bot-servers .servers-label{font-size:11px;color:var(--gray);margin-bottom:6px}
+        .server-tags{display:flex;flex-wrap:wrap;gap:4px}
+        .server-tag{font-size:11px;background:#09090B;border:1px solid var(--border);padding:2px 8px;border-radius:4px;color:var(--light)}
+
+        .bot-actions{display:flex;gap:8px}
+        .bot-actions button{flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;background:transparent;color:var(--light);transition:all 0.2s}
+        .bot-actions .start-btn:hover{border-color:var(--green);color:var(--green);background:rgba(16,185,129,0.1)}
+        .bot-actions .stop-btn:hover{border-color:var(--red);color:var(--red);background:rgba(239,68,68,0.1)}
+        .bot-actions .edit-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,58,237,0.1)}
+        .bot-actions .delete-btn:hover{border-color:var(--red);color:var(--red);background:rgba(239,68,68,0.1)}
+
+        /* Empty State */
+        .empty-state{text-align:center;padding:80px 20px;color:var(--gray)}
+        .empty-state .icon{font-size:48px;margin-bottom:16px}
+        .empty-state h3{font-size:20px;color:var(--white);margin-bottom:8px}
+        .empty-state p{margin-bottom:24px;font-size:14px}
+
+        /* Modal */
+        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;padding:20px}
+        .modal-overlay.show{display:flex}
+        .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto}
+        .modal h2{font-size:22px;font-weight:800;margin-bottom:24px}
+        .modal label{display:block;font-size:12px;font-weight:600;color:var(--light);margin-bottom:4px;margin-top:16px}
+        .modal input,.modal select,.modal textarea{width:100%;padding:10px 14px;background:#09090B;border:1px solid var(--border);border-radius:8px;color:var(--white);font-size:14px;font-family:inherit}
+        .modal textarea{min-height:80px;resize:vertical;font-family:inherit}
+        .modal input:focus,.modal select:focus,.modal textarea:focus{outline:none;border-color:var(--accent)}
+        .modal .hint{font-size:11px;color:var(--gray);margin-top:4px}
+        .modal-actions{display:flex;gap:12px;margin-top:24px}
+        .modal-actions button{flex:1;padding:12px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:none}
+        .modal-actions .save-btn{background:var(--accent);color:#fff}
+        .modal-actions .save-btn:hover{background:var(--accent-dark)}
+        .modal-actions .cancel-btn{background:transparent;border:1px solid var(--border);color:var(--light)}
+        .modal .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 20px;font-size:14px;z-index:200;display:none;animation:slideIn 0.3s}
+        @keyframes slideIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+        @media(max-width:768px){
+            .stats-bar{grid-template-columns:1fr 1fr}
+            .bots-grid{grid-template-columns:1fr}
+            .modal .row{grid-template-columns:1fr}
+        }
+    </style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div class="auth-screen" id="authScreen">
+    <div class="auth-box">
+        <h1>⚡ Bot<span>Forge</span></h1>
+        <p class="tagline">Deploy AI bots to Discord in one click</p>
+        
+        <div id="loginForm">
+            <label>Email</label>
+            <input type="email" id="loginEmail" placeholder="you@example.com">
+            <label>Password</label>
+            <input type="password" id="loginPassword" placeholder="••••••••">
+            <div class="auth-error" id="loginError"></div>
+            <button class="btn" onclick="login()">Log In</button>
+            <p class="switch">Don't have an account? <a onclick="showRegister()">Sign up</a></p>
+        </div>
+
+        <div id="registerForm" style="display:none">
+            <label>Name</label>
+            <input type="text" id="regName" placeholder="Your name">
+            <label>Email</label>
+            <input type="email" id="regEmail" placeholder="you@example.com">
+            <label>Password</label>
+            <input type="password" id="regPassword" placeholder="••••••••">
+            <div class="auth-error" id="regError"></div>
+            <button class="btn" onclick="register()">Create Account</button>
+            <p class="switch">Already have an account? <a onclick="showLogin()">Log in</a></p>
+        </div>
+    </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dashboard" id="dashboard">
+    <header>
+        <div class="logo">⚡ Bot<span>Forge</span></div>
+        <div class="user-info">
+            <span class="user-name" id="userName"></span>
+            <button class="logout-btn" onclick="logout()">Log Out</button>
+        </div>
+    </header>
+
+    <div class="main">
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="label">Total Bots</div>
+                <div class="value accent" id="statTotal">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Running</div>
+                <div class="value green" id="statRunning">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Servers</div>
+                <div class="value" id="statServers">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Messages Sent</div>
+                <div class="value yellow" id="statMessages">0</div>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <h2>Your Bots</h2>
+            <button class="create-btn" onclick="showCreateModal()">+ New Bot</button>
+        </div>
+
+        <div class="bots-grid" id="botsGrid">
+            <div class="empty-state" id="emptyState">
+                <div class="icon">🤖</div>
+                <h3>No bots yet</h3>
+                <p>Create your first AI bot and deploy it to Discord in seconds.</p>
+                <button class="create-btn" onclick="showCreateModal()">+ Create Your First Bot</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CREATE/EDIT MODAL -->
+<div class="modal-overlay" id="botModal">
+    <div class="modal">
+        <h2 id="modalTitle">Create New Bot</h2>
+        
+        <label>Bot Name *</label>
+        <input type="text" id="botName" placeholder="My AI Assistant">
+        <div class="hint">Give your bot a name you'll recognize</div>
+        
+        <label>Discord Bot Token *</label>
+        <input type="password" id="botToken" placeholder="MTIz...abc">
+        <div class="hint">Get this from <a href="https://discord.com/developers/applications" target="_blank" style="color:var(--accent)">Discord Developer Portal</a> → Your App → Bot → Token</div>
+
+        <div class="row">
+            <div>
+                <label>AI Provider *</label>
+                <select id="botProvider" onchange="updateModelOptions()">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                </select>
+            </div>
+            <div>
+                <label>Model</label>
+                <select id="botModel">
+                    <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
+                    <option value="gpt-4o">GPT-4o (balanced)</option>
+                    <option value="gpt-4.1">GPT-4.1 (latest)</option>
+                </select>
+            </div>
+        </div>
+
+        <label>AI API Key *</label>
+        <input type="password" id="botApiKey" placeholder="sk-...">
+        <div class="hint">Your OpenAI or Anthropic API key. We never store this on our servers in plain text.</div>
+
+        <label>Personality / System Prompt</label>
+        <textarea id="botPersonality" placeholder="You are a helpful, friendly AI assistant. You respond concisely and with personality. You help users with coding, writing, and brainstorming."></textarea>
+        <div class="hint">This defines how your bot behaves. Be specific about tone, expertise, and boundaries.</div>
+
+        <div class="row">
+            <div>
+                <label>Trigger Mode</label>
+                <select id="botTrigger">
+                    <option value="mention">@mention only</option>
+                    <option value="all">All messages</option>
+                    <option value="prefix">Prefix command</option>
+                </select>
+            </div>
+            <div>
+                <label>Prefix (if prefix mode)</label>
+                <input type="text" id="botPrefix" value="!" placeholder="!">
+            </div>
+        </div>
+
+        <input type="hidden" id="editBotId">
+
+        <div class="modal-actions">
+            <button class="cancel-btn" onclick="closeModal()">Cancel</button>
+            <button class="save-btn" onclick="saveBot()">Deploy Bot 🚀</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = window.location.origin + '/api';
+let token = localStorage.getItem('bf_token');
+let currentUser = null;
+let refreshInterval = null;
+
+// ============ AUTH ============
+
+function showLogin() {
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('registerForm').style.display = 'none';
+}
+
+function showRegister() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('registerForm').style.display = 'block';
+}
+
+async function login() {
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    const errEl = document.getElementById('loginError');
+    errEl.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        
+        token = data.token;
+        currentUser = data.user;
+        localStorage.setItem('bf_token', token);
+        showDashboard();
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+}
+
+async function register() {
+    const name = document.getElementById('regName').value;
+    const email = document.getElementById('regEmail').value;
+    const password = document.getElementById('regPassword').value;
+    const errEl = document.getElementById('regError');
+    errEl.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        
+        token = data.token;
+        currentUser = data.user;
+        localStorage.setItem('bf_token', token);
+        showDashboard();
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+}
+
+function logout() {
+    token = null;
+    currentUser = null;
+    localStorage.removeItem('bf_token');
+    if (refreshInterval) clearInterval(refreshInterval);
+    document.getElementById('authScreen').style.display = 'flex';
+    document.getElementById('dashboard').style.display = 'none';
+}
+
+// ============ DASHBOARD ============
+
+async function showDashboard() {
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    if (currentUser) document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+    
+    await refreshBots();
+    refreshInterval = setInterval(refreshBots, 5000);
+}
+
+async function refreshBots() {
+    try {
+        const res = await fetch(`${API}/bots`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        renderBots(data.bots);
+    } catch (err) {
+        console.error('Failed to refresh bots:', err);
+    }
+}
+
+function renderBots(bots) {
+    const grid = document.getElementById('botsGrid');
+    const empty = document.getElementById('emptyState');
+    
+    // Stats
+    let totalServers = 0, totalMessages = 0, running = 0;
+    bots.forEach(b => {
+        if (b.status === 'running') running++;
+        totalServers += (b.guilds || []).length;
+        totalMessages += b.messageCount || 0;
+    });
+    document.getElementById('statTotal').textContent = bots.length;
+    document.getElementById('statRunning').textContent = running;
+    document.getElementById('statServers').textContent = totalServers;
+    document.getElementById('statMessages').textContent = totalMessages;
+
+    if (bots.length === 0) {
+        grid.innerHTML = '';
+        grid.appendChild(empty);
+        empty.style.display = 'block';
+        return;
+    }
+
+    empty.style.display = 'none';
+    grid.innerHTML = bots.map(bot => `
+        <div class="bot-card">
+            <div class="bot-header">
+                <div class="bot-name">${esc(bot.name)}</div>
+                <div class="bot-status ${bot.status}">
+                    <div class="status-dot"></div>
+                    ${bot.status}
+                </div>
+            </div>
+            <div class="bot-meta">
+                <div class="bot-meta-item">
+                    <div class="meta-label">Provider</div>
+                    <div class="meta-value">${bot.aiProvider || 'openai'}</div>
+                </div>
+                <div class="bot-meta-item">
+                    <div class="meta-label">Model</div>
+                    <div class="meta-value">${bot.model || 'gpt-4o-mini'}</div>
+                </div>
+                <div class="bot-meta-item">
+                    <div class="meta-label">Trigger</div>
+                    <div class="meta-value">${bot.triggerMode || 'mention'}</div>
+                </div>
+                <div class="bot-meta-item">
+                    <div class="meta-label">Messages</div>
+                    <div class="meta-value">${bot.messageCount || 0}</div>
+                </div>
+            </div>
+            <div class="bot-personality">"${esc(bot.personality || 'No personality set')}"</div>
+            ${(bot.guilds && bot.guilds.length > 0) ? `
+                <div class="bot-servers">
+                    <div class="servers-label">Connected Servers</div>
+                    <div class="server-tags">
+                        ${bot.guilds.map(g => `<span class="server-tag">${esc(g.name)}</span>`).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            <div class="bot-actions">
+                ${bot.status === 'running' 
+                    ? `<button class="stop-btn" onclick="stopBot('${bot.id}')">⏹ Stop</button>`
+                    : `<button class="start-btn" onclick="startBot('${bot.id}')">▶ Start</button>`
+                }
+                <button class="edit-btn" onclick="editBot('${bot.id}')">✏️ Edit</button>
+                <button class="delete-btn" onclick="deleteBot('${bot.id}', '${esc(bot.name)}')">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ============ BOT ACTIONS ============
+
+async function startBot(id) {
+    try {
+        const res = await fetch(`${API}/bots/${id}/start`, { 
+            method: 'POST', 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast('Bot started! ✅');
+        await refreshBots();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function stopBot(id) {
+    try {
+        const res = await fetch(`${API}/bots/${id}/stop`, { 
+            method: 'POST', 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast('Bot stopped ⏹');
+        await refreshBots();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function deleteBot(id, name) {
+    if (!confirm(`Delete bot "${name}"? This cannot be undone.`)) return;
+    try {
+        const res = await fetch(`${API}/bots/${id}`, { 
+            method: 'DELETE', 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        if (!res.ok) { const data = await res.json(); throw new Error(data.error); }
+        showToast('Bot deleted 🗑️');
+        await refreshBots();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+function editBot(id) {
+    // For MVP, just show create modal. In full version, fetch bot config.
+    showToast('Edit coming soon — delete and recreate for now');
+}
+
+// ============ MODAL ============
+
+function showCreateModal() {
+    document.getElementById('modalTitle').textContent = 'Create New Bot';
+    document.getElementById('botName').value = '';
+    document.getElementById('botToken').value = '';
+    document.getElementById('botProvider').value = 'openai';
+    document.getElementById('botApiKey').value = '';
+    document.getElementById('botPersonality').value = '';
+    document.getElementById('botTrigger').value = 'mention';
+    document.getElementById('botPrefix').value = '!';
+    document.getElementById('editBotId').value = '';
+    updateModelOptions();
+    document.getElementById('botModal').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('botModal').classList.remove('show');
+}
+
+function updateModelOptions() {
+    const provider = document.getElementById('botProvider').value;
+    const modelSelect = document.getElementById('botModel');
+    if (provider === 'openai') {
+        modelSelect.innerHTML = `
+            <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
+            <option value="gpt-4o">GPT-4o (balanced)</option>
+            <option value="gpt-4.1">GPT-4.1 (latest)</option>
+            <option value="o3-mini">o3-mini (reasoning)</option>
+        `;
+    } else {
+        modelSelect.innerHTML = `
+            <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (balanced)</option>
+            <option value="claude-haiku-3-5-20241022">Claude 3.5 Haiku (fast)</option>
+            <option value="claude-opus-4-20250514">Claude Opus 4 (powerful)</option>
+        `;
+    }
+}
+
+async function saveBot() {
+    const name = document.getElementById('botName').value.trim();
+    const discordToken = document.getElementById('botToken').value.trim();
+    const aiProvider = document.getElementById('botProvider').value;
+    const model = document.getElementById('botModel').value;
+    const aiApiKey = document.getElementById('botApiKey').value.trim();
+    const personality = document.getElementById('botPersonality').value.trim();
+    const triggerMode = document.getElementById('botTrigger').value;
+    const prefix = document.getElementById('botPrefix').value;
+
+    if (!name || !discordToken || !aiApiKey) {
+        showToast('Please fill in all required fields', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API}/bots`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ name, discordToken, aiProvider, model, aiApiKey, personality, triggerMode, prefix })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        closeModal();
+        showToast('Bot created! Hit Start to deploy ✅');
+        await refreshBots();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+// ============ UTILS ============
+
+function showToast(msg, type) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    toast.style.borderColor = type === 'error' ? 'var(--red)' : 'var(--accent)';
+    setTimeout(() => toast.style.display = 'none', 3000);
+}
+
+function esc(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+}
+
+// ============ INIT ============
+
+(async () => {
+    if (token) {
+        try {
+            const res = await fetch(`${API}/bots`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (res.ok) {
+                currentUser = { name: 'User' }; // MVP - no /me endpoint yet
+                showDashboard();
+                return;
+            }
+        } catch {}
+    }
+    document.getElementById('authScreen').style.display = 'flex';
+})();
+</script>
+
+</body>
+</html>

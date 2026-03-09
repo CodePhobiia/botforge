@@ -1,0 +1,22 @@
+{
+  "name": "botforge",
+  "version": "1.0.0",
+  "description": "Deploy AI bots to Discord in one click",
+  "main": "src/api/server.js",
+  "scripts": {
+    "start": "node src/api/server.js",
+    "dev": "node --watch src/api/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@supabase/supabase-js": "*",
+    "bcryptjs": "*",
+    "cors": "*",
+    "discord.js": "*",
+    "dotenv": "*",
+    "express": "*",
+    "jsonwebtoken": "*",
+    "openai": "*",
+    "uuid": "*"
+  }
+}
