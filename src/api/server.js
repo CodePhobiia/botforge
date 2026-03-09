@@ -13,6 +13,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { version: APP_VERSION } = require('../../package.json');
 const { BotManager } = require('../engine/BotManager');
+const { AutoMod } = require('../engine/AutoMod');
 const { personalityPresets } = require('../engine/PersonalityPresets');
 const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser, requestIdMiddleware } = require('../middleware/security');
 const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
@@ -24,7 +25,8 @@ const {
     validateUpdateBot,
     validateUpdateBotConfig,
     validateBotIdParam,
-    validateBotTools
+    validateBotTools,
+    sanitizeObject
 } = require('../middleware/validation');
 const { errorHandler } = require('../middleware/errorHandler');
 const {
@@ -45,7 +47,9 @@ const {
     getBotAnalytics,
     getConversationsByBot,
     searchConversations,
-    getAllConversationsByBot
+    getAllConversationsByBot,
+    getModLogs,
+    getModStats
 } = require('../db/database');
 
 const app = express();
@@ -77,6 +81,11 @@ function maskBotForResponse(config, status = null) {
     const { discordToken, aiApiKey, updatedAt, ...rest } = config;
     const payload = status ? { ...rest, ...status } : rest;
     return { ...payload, discordToken: '***', aiApiKey: '***' };
+}
+
+function normalizeAutomodConfig(raw) {
+    const sanitized = sanitizeObject(raw || {});
+    return AutoMod.normalizeConfig(sanitized);
 }
 
 function getCorsStatus() {
@@ -174,6 +183,10 @@ botManager.on('error', (payload) => {
 
 botManager.on('uptime', (payload) => {
     recordBotUptime(payload.botId, payload.startAt, payload.endAt);
+});
+
+botManager.on('automod', (payload) => {
+    emitToUser(payload.userId, 'bot_automod', payload);
 });
 
 function findUserBot(userId, botId) {
@@ -447,6 +460,69 @@ app.patch('/api/bots/:id/config', auth, validateBotIdParam, validateUpdateBotCon
         }
 
         res.json({ bot: maskBotForResponse(storedConfig || config, status) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get automod config
+app.get('/api/bots/:id/automod', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const automod = normalizeAutomodConfig(config.automodConfig || {});
+        res.json({ automod });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update automod config
+app.put('/api/bots/:id/automod', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const automodConfig = normalizeAutomodConfig(req.body || {});
+        const storedConfig = updateBotRecord(req.userId, req.params.id, { automodConfig });
+        logBotEvent(req.params.id, 'automod-updated', 'AutoMod config updated');
+
+        try {
+            botManager.updateBotAutomod(config.id, automodConfig);
+        } catch (err) {
+            console.warn(`[BotForge] Live automod update skipped for ${config.id}:`, err.message);
+        }
+
+        res.json({ automod: automodConfig });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get automod logs
+app.get('/api/bots/:id/automod/logs', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const logs = getModLogs(config.id, limit, offset);
+        res.json({ logs, limit, offset });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get automod stats
+app.get('/api/bots/:id/automod/stats', auth, validateBotIdParam, (req, res) => {
+    try {
+        const config = getBotById(req.userId, req.params.id);
+        if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        const stats = getModStats(config.id);
+        res.json({ stats });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
