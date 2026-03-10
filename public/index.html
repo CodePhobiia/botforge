@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BotForge Dashboard — Manage Your Bots</title>
-    <meta name="description" content="Deploy AI-powered Discord bots in seconds. Bring your own API keys, configure personalities, and run multiple bots that work together.">
+    <title>BotForge Dashboard — OpenClaw Bot Control</title>
+    <meta name="description" content="Deploy OpenClaw-powered Discord bots, configure personalities, and manage migration-safe runtime settings from one dashboard.">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -166,6 +166,13 @@
         .modal .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
         .modal .edit-note{background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);color:var(--light);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:12px;display:none}
         .modal.editing .edit-note{display:block}
+        .migration-banner{display:grid;gap:6px;padding:12px 14px;border-radius:12px;border:1px solid rgba(34,211,238,0.3);background:linear-gradient(135deg,rgba(34,211,238,0.12),rgba(124,58,237,0.12));margin-bottom:14px}
+        .migration-banner strong{font-size:12px;color:var(--white);letter-spacing:0.4px;text-transform:uppercase}
+        .migration-banner span{font-size:12px;color:var(--light);line-height:1.6}
+        .static-field{display:grid;gap:4px;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface)}
+        .static-field strong{font-size:14px;color:var(--white)}
+        .static-field span{font-size:11px;color:var(--gray);line-height:1.5}
+        .inline-note{display:none;margin-top:8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.12);font-size:11px;color:var(--light);line-height:1.5}
 
         .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 20px;font-size:14px;z-index:200;display:none;animation:slideIn 0.3s}
         @keyframes slideIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -245,6 +252,12 @@
         .detail-section{background:var(--surface-3);border:1px solid var(--border);border-radius:14px;padding:16px}
         .detail-section.full{grid-column:1 / -1}
         .detail-section h4{font-size:14px;font-weight:700;margin-bottom:10px}
+        .section-note{font-size:12px;color:var(--gray);line-height:1.6}
+        .unavailable-card{display:grid;gap:8px;padding:14px;border-radius:12px;border:1px dashed var(--border);background:linear-gradient(180deg,var(--surface),var(--surface-2))}
+        .unavailable-card strong{font-size:13px;color:var(--white)}
+        .unavailable-card span{font-size:12px;color:var(--gray);line-height:1.6}
+        .surface-disabled{opacity:0.72}
+        .surface-disabled input,.surface-disabled textarea,.surface-disabled select,.surface-disabled button{cursor:not-allowed}
         .uptime-chart{display:flex;align-items:flex-end;gap:6px;height:120px;margin-bottom:8px}
         .uptime-bar{flex:1;background:linear-gradient(180deg, rgba(124,58,237,0.75), rgba(124,58,237,0.2));border-radius:6px 6px 0 0}
         .uptime-meta{font-size:12px;color:var(--gray)}
@@ -401,6 +414,7 @@
         .analytics-metric{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
         .analytics-label{font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:0.7px}
         .analytics-value{font-size:16px;font-weight:700;margin-top:6px}
+        .analytics-value.muted{font-size:14px;color:var(--gray);font-weight:600}
         .analytics-chart{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:12px}
         .analytics-commands h5{font-size:12px;color:var(--gray);margin-bottom:8px}
         .command-list{display:flex;flex-wrap:wrap;gap:6px}
@@ -458,7 +472,7 @@
 <div class="auth-screen" id="authScreen">
     <div class="auth-box">
         <h1>⚡ Bot<span>Forge</span></h1>
-        <p class="tagline">Deploy AI bots to Discord in one click</p>
+        <p class="tagline">Deploy OpenClaw-powered Discord bots with migration-safe controls</p>
 
         <a class="discord-btn" href="/api/auth/discord">👾 Login with Discord</a>
         <div class="oauth-divider"><span>or</span></div>
@@ -509,7 +523,7 @@
         <aside class="sidebar">
             <div>
                 <div class="side-logo">⚡ Bot<span>Forge</span></div>
-                <div class="side-tag">Command Center</div>
+                <div class="side-tag">OpenClaw Command Center</div>
             </div>
             <nav class="side-nav">
                 <button class="side-link active" data-page="bots" onclick="showPage('bots')">🤖 Bots</button>
@@ -613,8 +627,8 @@
                         <div class="empty-step">
                             <div class="step-index">2</div>
                             <div>
-                                <strong>Add your AI key</strong>
-                                <span>Connect OpenAI or Anthropic in the deploy form.</span>
+                                <strong>Add your OpenClaw credential</strong>
+                                <span>Use the deploy form to connect the runtime credential your OpenClaw setup expects.</span>
                             </div>
                         </div>
                         <div class="empty-step">
@@ -735,7 +749,7 @@
                                 <th>Bot</th>
                                 <th>Owner</th>
                                 <th>Status</th>
-                                <th>Provider</th>
+                                <th>Runtime</th>
                                 <th>Model</th>
                                 <th>Messages</th>
                                 <th>Created</th>
@@ -777,7 +791,7 @@
         <div class="template-tabs" id="templateTabs"></div>
         <div class="template-grid" id="templateGrid"></div>
         <div class="template-footer">
-            <div class="hint">Tip: Templates prefill personality, model, and trigger mode.</div>
+            <div class="hint">Tip: Templates prefill personality, OpenClaw model, and trigger mode. Legacy prefix templates are normalized before deploy.</div>
             <button class="secondary-btn" onclick="startFromScratch()">Start from Scratch</button>
         </div>
     </div>
@@ -786,13 +800,17 @@
 <!-- CREATE/EDIT MODAL -->
 <div class="modal-overlay" id="botModal">
     <div class="modal" id="botModalCard">
-        <h2 id="modalTitle">Create New Bot</h2>
+        <h2 id="modalTitle">Create OpenClaw Bot</h2>
         <div class="template-selected" id="templateSelected" style="display:none">
             <span>Template:</span>
             <strong id="templateSelectedName"></strong>
             <button class="ghost-btn" onclick="showTemplateModal()">Change</button>
         </div>
-        <div class="edit-note" id="editNote">Editing a bot? Leave the Discord token and API key blank to keep the current values.</div>
+        <div class="edit-note" id="editNote">Editing a bot? Leave the Discord token and OpenClaw credential blank to keep the current values.</div>
+        <div class="migration-banner">
+            <strong>Powered by OpenClaw</strong>
+            <span>BotForge is in OpenClaw-only mode. This form only exposes controls that are currently supported by the migration build.</span>
+        </div>
         
         <label>Bot Name *</label>
         <input type="text" id="botName" placeholder="My AI Assistant">
@@ -804,25 +822,21 @@
 
         <div class="row">
             <div>
-                <label>AI Provider *</label>
-                <select id="botProvider" onchange="updateModelOptions()">
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                </select>
+                <label>Runtime</label>
+                <div class="static-field">
+                    <strong>OpenClaw</strong>
+                    <span>Bot responses are routed through the OpenClaw runtime during this migration.</span>
+                </div>
             </div>
             <div>
-                <label>Model</label>
-                <select id="botModel">
-                    <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
-                    <option value="gpt-4o">GPT-4o (balanced)</option>
-                    <option value="gpt-4.1">GPT-4.1 (latest)</option>
-                </select>
+                <label>OpenClaw Model</label>
+                <select id="botModel"></select>
             </div>
         </div>
 
-        <label>AI API Key *</label>
+        <label>OpenClaw Credential *</label>
         <input type="password" id="botApiKey" placeholder="sk-...">
-        <div class="hint">Your OpenAI or Anthropic API key. We never store this on our servers in plain text.</div>
+        <div class="hint">Paste the credential your OpenClaw deployment uses for inference. It is never stored in plain text.</div>
 
         <label>Personality / System Prompt</label>
         <textarea id="botPersonality" placeholder="You are a helpful, friendly AI assistant. You respond concisely and with personality. You help users with coding, writing, and brainstorming."></textarea>
@@ -834,20 +848,20 @@
                 <select id="botTrigger">
                     <option value="mention">@mention only</option>
                     <option value="all">All messages</option>
-                    <option value="prefix">Prefix command</option>
                 </select>
             </div>
             <div>
-                <label>Prefix (if prefix mode)</label>
-                <input type="text" id="botPrefix" value="!" placeholder="!">
+                <label>Legacy Prefix</label>
+                <input type="text" id="botPrefix" value="" placeholder="Prefix triggers are unavailable in OpenClaw mode" disabled>
             </div>
         </div>
+        <div class="inline-note" id="prefixMigrationNotice"></div>
 
         <input type="hidden" id="editBotId">
 
         <div class="modal-actions">
             <button class="cancel-btn" onclick="closeModal()">Cancel</button>
-            <button class="save-btn" id="saveBotBtn" onclick="saveBot()">Deploy Bot 🚀</button>
+            <button class="save-btn" id="saveBotBtn" onclick="saveBot()">Deploy OpenClaw Bot</button>
         </div>
     </div>
 </div>
@@ -864,9 +878,11 @@
         </div>
         <div class="detail-grid">
             <div class="detail-section">
-                <h4>Uptime (last 24h)</h4>
-                <div class="uptime-chart" id="uptimeChart"></div>
-                <div class="uptime-meta" id="uptimeMeta"></div>
+                <h4>Runtime Telemetry</h4>
+                <div class="unavailable-card">
+                    <strong>OpenClaw runtime telemetry is not exposed yet.</strong>
+                    <span>BotForge no longer shows synthetic uptime or fake live health in this panel during the migration.</span>
+                </div>
             </div>
             <div class="detail-section">
                 <h4>Connected Servers</h4>
@@ -883,8 +899,8 @@
                 </div>
                 <div class="analytics-grid">
                     <div class="analytics-metric">
-                        <div class="analytics-label">Uptime</div>
-                        <div class="analytics-value" id="analyticsUptime">--</div>
+                        <div class="analytics-label">Runtime Uptime</div>
+                        <div class="analytics-value muted" id="analyticsUptime">Unavailable</div>
                     </div>
                     <div class="analytics-metric">
                         <div class="analytics-label">Error Rate</div>
@@ -930,75 +946,27 @@
             </div>
             <div class="detail-section full" id="slashCommandsSection">
                 <div class="detail-section-header">
-                    <h4>Slash Commands</h4>
-                    <div class="slash-actions">
-                        <button class="secondary-btn" onclick="syncSlashCommands()">Sync to Discord</button>
-                        <button class="primary-btn" onclick="openSlashCommandForm()">Add Command</button>
+                    <div>
+                        <h4>Slash Commands</h4>
+                        <div class="section-note">Stored definitions are shown for reference. Discord sync and editing are disabled in the OpenClaw migration.</div>
                     </div>
+                    <button class="ghost-btn" onclick="refreshSlashCommands()">Refresh</button>
                 </div>
                 <div class="slash-grid">
                     <div class="slash-card">
                         <div class="slash-card-header">
                             <div class="slash-card-title">Commands</div>
-                            <button class="ghost-btn" onclick="refreshSlashCommands()">Refresh</button>
                         </div>
                         <div class="slash-list" id="slashCommandList"></div>
                     </div>
                     <div class="slash-card">
                         <div class="slash-card-header">
-                            <div class="slash-card-title">Builder</div>
-                            <div class="slash-pill" id="slashFormBadge">New</div>
+                            <div class="slash-card-title">Migration Status</div>
+                            <div class="slash-pill">Read-only</div>
                         </div>
-                        <div class="slash-form" id="slashCommandForm">
-                            <div class="slash-form-empty">Select a command to edit or click Add Command.</div>
-                            <div class="slash-form-fields">
-                                <div class="slash-field">
-                                    <label>Command name</label>
-                                    <input type="text" id="slashName" placeholder="hello" oninput="normalizeSlashNameInput(); updateSlashPreview()">
-                                    <div class="hint">Lowercase, no spaces. Example: hello</div>
-                                </div>
-                                <div class="slash-field">
-                                    <label>Description</label>
-                                    <input type="text" id="slashDescription" placeholder="Sends a greeting" oninput="updateSlashPreview()">
-                                </div>
-                                <div class="slash-field">
-                                    <label>Response type</label>
-                                    <select id="slashType" onchange="updateSlashPreview()">
-                                        <option value="text">Text</option>
-                                        <option value="ai">AI</option>
-                                        <option value="embed">Embed</option>
-                                    </select>
-                                </div>
-                                <div class="slash-field">
-                                    <label>Response template</label>
-                                    <textarea id="slashTemplate" placeholder="Hello {user}! You're in {channel}." oninput="updateSlashPreview()"></textarea>
-                                    <div class="hint">Use placeholders like {user}, {channel}, {guild}, or {option:topic}.</div>
-                                </div>
-                                <div class="slash-field">
-                                    <label>Options</label>
-                                    <div class="slash-options" id="slashOptions"></div>
-                                    <button class="secondary-btn" type="button" onclick="addSlashOptionRow()">Add option</button>
-                                </div>
-                                <div class="slash-field">
-                                    <label>Enabled</label>
-                                    <label class="switch">
-                                        <input type="checkbox" id="slashEnabled" checked>
-                                        <span class="slider"></span>
-                                    </label>
-                                </div>
-                                <div class="slash-field">
-                                    <label>Preview</label>
-                                    <div class="slash-preview" id="slashCommandPreview">
-                                        <div class="slash-preview-title">/command</div>
-                                        <div class="slash-preview-desc">No description yet.</div>
-                                        <div class="slash-preview-meta">Response: text</div>
-                                    </div>
-                                </div>
-                                <div class="slash-actions">
-                                    <button class="secondary-btn" type="button" onclick="closeSlashCommandForm()">Cancel</button>
-                                    <button class="primary-btn" type="button" onclick="saveSlashCommand()">Save Command</button>
-                                </div>
-                            </div>
+                        <div class="unavailable-card">
+                            <strong>Discord slash-command publishing is unavailable.</strong>
+                            <span>BotForge keeps any stored command definitions visible, but add, edit, delete, and sync actions stay disabled until OpenClaw can publish them safely.</span>
                         </div>
                     </div>
                 </div>
@@ -1026,11 +994,8 @@
                                     <input type="radio" name="configTrigger" value="all">
                                     <span>All messages</span>
                                 </label>
-                                <label class="toggle-pill">
-                                    <input type="radio" name="configTrigger" value="prefix">
-                                    <span>Prefix</span>
-                                </label>
                             </div>
+                            <div class="inline-note" id="configPrefixNotice">Legacy prefix mode is not available in the OpenClaw migration. Choose a supported trigger before applying changes.</div>
                         </div>
                     </div>
                     <div>
@@ -1216,18 +1181,21 @@
             </div>
             <div class="detail-section full" id="automodSection">
                 <div class="detail-section-header">
-                    <h4>Auto-Mod</h4>
-                    <button class="secondary-btn" onclick="saveAutomodConfig()">Save Auto-Mod</button>
+                    <div>
+                        <h4>Auto-Mod</h4>
+                        <div class="section-note">Rules are shown for reference only. OpenClaw does not enforce Auto-Mod actions in this migration build.</div>
+                    </div>
+                    <button class="secondary-btn" onclick="saveAutomodConfig()" disabled>Stored Only</button>
                 </div>
                 <div class="automod-grid">
-                    <div class="automod-card">
+                    <div class="automod-card surface-disabled">
                         <div class="automod-toggle">
                             <div>
                                 <div class="toggle-title">Word Filter</div>
                                 <div class="toggle-desc">Block banned words and phrases</div>
                             </div>
                             <label class="switch">
-                                <input type="checkbox" id="automodWordFilter">
+                                <input type="checkbox" id="automodWordFilter" disabled>
                                 <span class="slider"></span>
                             </label>
                         </div>
@@ -1237,7 +1205,7 @@
                                 <div class="toggle-desc">Repeat, caps, and mention checks</div>
                             </div>
                             <label class="switch">
-                                <input type="checkbox" id="automodSpam">
+                                <input type="checkbox" id="automodSpam" disabled>
                                 <span class="slider"></span>
                             </label>
                         </div>
@@ -1247,7 +1215,7 @@
                                 <div class="toggle-desc">Block URLs outside the whitelist</div>
                             </div>
                             <label class="switch">
-                                <input type="checkbox" id="automodLinks">
+                                <input type="checkbox" id="automodLinks" disabled>
                                 <span class="slider"></span>
                             </label>
                         </div>
@@ -1257,32 +1225,32 @@
                                 <div class="toggle-desc">Lock down during mass joins</div>
                             </div>
                             <label class="switch">
-                                <input type="checkbox" id="automodRaid">
+                                <input type="checkbox" id="automodRaid" disabled>
                                 <span class="slider"></span>
                             </label>
                         </div>
                         <div>
                             <div class="config-label">Banned Words (comma-separated)</div>
-                            <textarea id="automodBannedWords" placeholder="word1, phrase two"></textarea>
+                            <textarea id="automodBannedWords" placeholder="word1, phrase two" disabled></textarea>
                         </div>
                         <div class="config-row">
                             <div>
                                 <div class="config-label">Caps % Threshold</div>
-                                <input type="number" id="automodCapsPercent" min="30" max="100" placeholder="70">
+                                <input type="number" id="automodCapsPercent" min="30" max="100" placeholder="70" disabled>
                             </div>
                             <div>
                                 <div class="config-label">Mentions Limit</div>
-                                <input type="number" id="automodMentionsLimit" min="1" max="50" placeholder="5">
+                                <input type="number" id="automodMentionsLimit" min="1" max="50" placeholder="5" disabled>
                             </div>
                         </div>
                         <div class="config-row">
                             <div>
                                 <div class="config-label">Spam Window (seconds)</div>
-                                <input type="number" id="automodSpamWindow" min="2" max="60" placeholder="6">
+                                <input type="number" id="automodSpamWindow" min="2" max="60" placeholder="6" disabled>
                             </div>
                             <div>
                                 <div class="config-label">Default Action</div>
-                                <select id="automodDefaultAction">
+                                <select id="automodDefaultAction" disabled>
                                     <option value="warn">Warn</option>
                                     <option value="delete">Delete</option>
                                     <option value="mute">Mute</option>
@@ -1293,15 +1261,18 @@
                         </div>
                         <div>
                             <div class="config-label">Link Whitelist (comma-separated)</div>
-                            <textarea id="automodLinkWhitelist" placeholder="example.com, trusted.site"></textarea>
+                            <textarea id="automodLinkWhitelist" placeholder="example.com, trusted.site" disabled></textarea>
                         </div>
                     </div>
                     <div class="automod-card">
                         <div class="detail-section-header">
-                            <h5>Recent Actions</h5>
-                            <button class="ghost-btn" onclick="loadAutomodLogs({ reset: true })">Refresh</button>
+                            <h5>Enforcement Status</h5>
                         </div>
-                        <div class="automod-log-list" id="automodLogList"></div>
+                        <div class="unavailable-card">
+                            <strong>Live Auto-Mod actions are disabled.</strong>
+                            <span>BotForge does not show live moderation logs here because the OpenClaw migration build is not enforcing those rules in production traffic yet.</span>
+                        </div>
+                        <div class="automod-log-list" id="automodLogList" style="display:none"></div>
                         <div class="automod-log-meta" id="automodLogMeta"></div>
                     </div>
                 </div>
@@ -1380,6 +1351,24 @@ let adminState = {
 };
 let adminRefreshInterval = null;
 
+const OPENCLAW_LABEL = 'OpenClaw';
+const OPENCLAW_CAPABILITIES = Object.freeze({
+    prefixTrigger: false,
+    slashCommandPublishing: false,
+    automodEnforcement: false,
+    runtimeTelemetry: false
+});
+const OPENCLAW_DEFAULT_TRIGGER = 'mention';
+const OPENCLAW_MODEL_OPTIONS = [
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4.1', label: 'GPT-4.1' },
+    { value: 'o3-mini', label: 'o3-mini' },
+    { value: 'claude-haiku-3-5-20241022', label: 'Claude 3.5 Haiku' },
+    { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { value: 'claude-opus-4-20250514', label: 'Claude Opus 4' }
+];
+
 const DEFAULT_AUTOMOD_CONFIG = {
     defaultAction: 'warn',
     muteDurationSeconds: 600,
@@ -1436,21 +1425,91 @@ const onboardingSteps = [
         ]
     },
     {
-        title: 'Add your AI API key',
-        description: 'OpenAI is great for fast, general-purpose chat and tools, while Anthropic shines for long-form and safety-focused responses. Grab a key from your provider and paste it into the form.',
-        actions: [
-            { type: 'link', label: 'Get OpenAI Key', href: 'https://platform.openai.com/account/api-keys' },
-            { type: 'link', label: 'Get Anthropic Key', href: 'https://console.anthropic.com/settings/keys' }
-        ]
+        title: 'Add your OpenClaw credential',
+        description: 'Paste the credential your OpenClaw deployment expects so BotForge can route bot requests through the migration-safe runtime.',
+        actions: []
     },
     {
         title: 'Deploy!',
-        description: 'Click Deploy Bot in the form, then hit Start to go live in Discord. You can monitor status and tweak settings anytime.',
+        description: 'Click Deploy OpenClaw Bot in the form, then hit Start to go live in Discord. You can monitor status and tweak supported settings anytime.',
         actions: [
             { type: 'button', label: 'Create your first bot', action: 'templates' }
         ]
     }
 ];
+
+function getOpenClawModelLabel(model) {
+    const option = OPENCLAW_MODEL_OPTIONS.find((item) => item.value === model);
+    return option?.label || (model ? String(model) : 'Default model');
+}
+
+function getOpenClawRuntimeLabel(model) {
+    return `${OPENCLAW_LABEL} • ${getOpenClawModelLabel(model)}`;
+}
+
+function getTriggerModeLabel(triggerMode) {
+    switch (triggerMode) {
+        case 'all':
+            return 'All messages';
+        case 'prefix':
+            return OPENCLAW_CAPABILITIES.prefixTrigger ? 'Prefix' : 'Legacy prefix';
+        case 'mention':
+        default:
+            return '@mention only';
+    }
+}
+
+function resetBotTriggerPlaceholder() {
+    const select = document.getElementById('botTrigger');
+    const placeholder = select?.querySelector('option[data-legacy-placeholder="true"]');
+    if (placeholder) placeholder.remove();
+}
+
+function setBotTriggerSelection(triggerMode = OPENCLAW_DEFAULT_TRIGGER, { prefix = '', source = 'bot' } = {}) {
+    const select = document.getElementById('botTrigger');
+    const prefixInput = document.getElementById('botPrefix');
+    const notice = document.getElementById('prefixMigrationNotice');
+    if (!select || !prefixInput || !notice) return;
+
+    resetBotTriggerPlaceholder();
+    prefixInput.value = prefix || '';
+
+    if (!OPENCLAW_CAPABILITIES.prefixTrigger && triggerMode === 'prefix') {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Choose an OpenClaw trigger';
+        option.dataset.legacyPlaceholder = 'true';
+        select.prepend(option);
+        select.value = '';
+        notice.textContent = source === 'template'
+            ? 'This template used a legacy prefix trigger. Choose @mention only or All messages before deploying with OpenClaw.'
+            : `This bot still has a legacy prefix trigger${prefix ? ` (${prefix})` : ''}. Choose a supported OpenClaw trigger before saving.`;
+        notice.style.display = 'block';
+        return;
+    }
+
+    select.value = triggerMode || OPENCLAW_DEFAULT_TRIGGER;
+    notice.textContent = '';
+    notice.style.display = 'none';
+}
+
+function populateConfigTriggerSelection(triggerMode) {
+    const note = document.getElementById('configPrefixNotice');
+    const inputs = Array.from(document.querySelectorAll('input[name="configTrigger"]'));
+    inputs.forEach((input) => {
+        input.checked = false;
+    });
+
+    if (!OPENCLAW_CAPABILITIES.prefixTrigger && triggerMode === 'prefix') {
+        if (note) note.style.display = 'block';
+        return;
+    }
+
+    const normalized = triggerMode || OPENCLAW_DEFAULT_TRIGGER;
+    const match = inputs.find((input) => input.value === normalized);
+    if (match) match.checked = true;
+    if (note) note.style.display = 'none';
+}
 
 // ============ THEME ============
 
@@ -1979,8 +2038,8 @@ function renderAdminBots() {
                 <td>${esc(bot.name || 'Bot')}</td>
                 <td>${esc(owner)}</td>
                 <td><span class="admin-tag ${status}">${esc(status)}</span></td>
-                <td>${esc(bot.aiProvider || 'openai')}</td>
-                <td>${esc(bot.model || 'gpt-4o-mini')}</td>
+                <td>${esc(OPENCLAW_LABEL)}</td>
+                <td>${esc(getOpenClawModelLabel(bot.model || 'gpt-4o-mini'))}</td>
                 <td>${esc((bot.messageCount || 0).toString())}</td>
                 <td>${esc(formatAdminDate(bot.createdAt))}</td>
             </tr>
@@ -2043,7 +2102,6 @@ function renderBots(bots) {
 
     grid.innerHTML = visibleBots.map(bot => {
         const status = bot.status || 'stopped';
-        const provider = bot.aiProvider || 'openai';
         const model = bot.model || 'gpt-4o-mini';
         const lastActive = formatLastActive(bot.lastResponseAt || bot.lastActiveAt || bot.startedAt);
         return `
@@ -2051,7 +2109,7 @@ function renderBots(bots) {
             <div class="bot-header">
                 <div>
                     <div class="bot-name">${esc(bot.name)}</div>
-                    <div class="bot-sub">${esc(provider)} • ${esc(model)}</div>
+                    <div class="bot-sub">${esc(getOpenClawRuntimeLabel(model))}</div>
                 </div>
                 <div class="bot-status ${status}" id="bot-status-${bot.id}">
                     <div class="status-dot"></div>
@@ -2069,7 +2127,7 @@ function renderBots(bots) {
                 </div>
                 <div class="bot-meta-item">
                     <div class="meta-label">Trigger</div>
-                    <div class="meta-value">${bot.triggerMode || 'mention'}</div>
+                    <div class="meta-value">${esc(getTriggerModeLabel(bot.triggerMode || 'mention'))}</div>
                 </div>
             </div>
             <div class="bot-personality">"${esc(bot.personality || 'No personality set')}"</div>
@@ -2136,9 +2194,8 @@ function updateBotCard(bot) {
     if (!card) return;
     const subEl = card.querySelector('.bot-sub');
     if (subEl) {
-        const provider = bot.aiProvider || 'openai';
         const model = bot.model || 'gpt-4o-mini';
-        subEl.textContent = `${provider} • ${model}`;
+        subEl.textContent = getOpenClawRuntimeLabel(model);
     }
     const actionsEl = card.querySelector('.bot-actions');
     if (!actionsEl) return;
@@ -2155,12 +2212,7 @@ function updateBotCard(bot) {
 function updateDetailStatus(bot) {
     const metaEl = document.getElementById('detailMeta');
     if (metaEl) {
-        metaEl.textContent = `${bot.status || 'stopped'} | ${bot.aiProvider || 'openai'} | ${bot.model || 'gpt-4o-mini'}`;
-    }
-    const uptimeMeta = document.getElementById('uptimeMeta');
-    if (uptimeMeta && uptimeMeta.dataset.source !== 'analytics') {
-        const uptime = generateUptimeBars(bot.id || '', bot.status);
-        uptimeMeta.textContent = `${uptime.percent}% uptime - ${bot.messageCount || 0} messages processed`;
+        metaEl.textContent = `${bot.status || 'stopped'} | ${OPENCLAW_LABEL} | ${getOpenClawModelLabel(bot.model || 'gpt-4o-mini')}`;
     }
 }
 
@@ -2290,22 +2342,20 @@ function editBot(id) {
         showToast('Bot not found', 'error');
         return;
     }
-    document.getElementById('modalTitle').textContent = 'Edit Bot';
+    document.getElementById('modalTitle').textContent = 'Edit OpenClaw Bot';
     document.getElementById('botName').value = bot.name || '';
     document.getElementById('botToken').value = '';
-    document.getElementById('botProvider').value = bot.aiProvider || 'openai';
-    updateModelOptions();
+    updateModelOptions(bot.model || 'gpt-4o-mini');
     const modelSelect = document.getElementById('botModel');
-    modelSelect.value = bot.model || (bot.aiProvider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o-mini');
+    modelSelect.value = bot.model || 'gpt-4o-mini';
     if (!modelSelect.value && modelSelect.options.length) {
         modelSelect.value = modelSelect.options[0].value;
     }
     document.getElementById('botApiKey').value = '';
     document.getElementById('botPersonality').value = bot.personality || '';
-    document.getElementById('botTrigger').value = bot.triggerMode || 'mention';
-    document.getElementById('botPrefix').value = bot.prefix || '!';
+    setBotTriggerSelection(bot.triggerMode || OPENCLAW_DEFAULT_TRIGGER, { prefix: bot.prefix || '!', source: 'bot' });
     document.getElementById('editBotId').value = bot.id;
-    document.getElementById('saveBotBtn').textContent = 'Update Bot';
+    document.getElementById('saveBotBtn').textContent = 'Update OpenClaw Bot';
     document.getElementById('botModalCard').classList.add('editing');
     selectedTemplate = null;
     updateTemplateSelected();
@@ -2411,8 +2461,8 @@ function renderTemplateGrid() {
                 <div class="template-desc">${esc(template.description)}</div>
                 <div class="template-meta">
                     <span class="template-category">${esc(template.category || 'Template')}</span>
-                    <span class="template-tag">${esc(template.suggestedModel || 'model')}</span>
-                    <span class="template-tag">${esc(template.suggestedTrigger || 'mention')}</span>
+                    <span class="template-tag">${esc(getOpenClawModelLabel(template.suggestedModel || 'gpt-4o-mini'))}</span>
+                    <span class="template-tag">${esc(getTriggerModeLabel(template.suggestedTrigger || 'mention'))}</span>
                 </div>
             </div>
         `;
@@ -2462,16 +2512,14 @@ function showCreateModal() {
 }
 
 function openBlankCreateModal() {
-    document.getElementById('modalTitle').textContent = 'Create New Bot';
+    document.getElementById('modalTitle').textContent = 'Create OpenClaw Bot';
     document.getElementById('botName').value = '';
     document.getElementById('botToken').value = '';
-    document.getElementById('botProvider').value = 'openai';
     document.getElementById('botApiKey').value = '';
     document.getElementById('botPersonality').value = '';
-    document.getElementById('botTrigger').value = 'mention';
-    document.getElementById('botPrefix').value = '!';
+    setBotTriggerSelection(OPENCLAW_DEFAULT_TRIGGER);
     document.getElementById('editBotId').value = '';
-    document.getElementById('saveBotBtn').textContent = 'Deploy Bot 🚀';
+    document.getElementById('saveBotBtn').textContent = 'Deploy OpenClaw Bot';
     document.getElementById('botModalCard').classList.remove('editing');
     selectedTemplate = null;
     updateTemplateSelected();
@@ -2483,11 +2531,9 @@ function openCreateModalWithTemplate(template) {
     openBlankCreateModal();
     selectedTemplate = template;
     document.getElementById('botPersonality').value = template.systemPrompt || '';
-    document.getElementById('botTrigger').value = template.suggestedTrigger || 'mention';
+    setBotTriggerSelection(template.suggestedTrigger || OPENCLAW_DEFAULT_TRIGGER, { source: 'template' });
 
-    const provider = inferProviderFromModel(template.suggestedModel);
-    document.getElementById('botProvider').value = provider;
-    updateModelOptions();
+    updateModelOptions(template.suggestedModel);
     const modelSelect = document.getElementById('botModel');
     if (template.suggestedModel) {
         modelSelect.value = template.suggestedModel;
@@ -2504,26 +2550,17 @@ function closeModal() {
     document.getElementById('botModalCard').classList.remove('editing');
 }
 
-function updateModelOptions() {
-    const provider = document.getElementById('botProvider').value;
+function updateModelOptions(selectedValue = null) {
     const modelSelect = document.getElementById('botModel');
-    renderModelOptions(modelSelect, provider);
+    renderModelOptions(modelSelect, selectedValue);
 }
 
-function renderModelOptions(selectEl, provider, selectedValue = null) {
+function renderModelOptions(selectEl, selectedValue = null) {
     if (!selectEl) return;
-    const options = provider === 'anthropic'
-        ? [
-            { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4 (balanced)' },
-            { value: 'claude-haiku-3-5-20241022', label: 'Claude 3.5 Haiku (fast)' },
-            { value: 'claude-opus-4-20250514', label: 'Claude Opus 4 (powerful)' }
-        ]
-        : [
-            { value: 'gpt-4o-mini', label: 'GPT-4o Mini (fast, cheap)' },
-            { value: 'gpt-4o', label: 'GPT-4o (balanced)' },
-            { value: 'gpt-4.1', label: 'GPT-4.1 (latest)' },
-            { value: 'o3-mini', label: 'o3-mini (reasoning)' }
-        ];
+    const options = OPENCLAW_MODEL_OPTIONS.slice();
+    if (selectedValue && !options.some((option) => option.value === selectedValue)) {
+        options.push({ value: selectedValue, label: `${selectedValue} (legacy)` });
+    }
 
     selectEl.innerHTML = options.map(option => (
         `<option value="${option.value}">${option.label}</option>`
@@ -2541,12 +2578,10 @@ function renderModelOptions(selectEl, provider, selectedValue = null) {
 async function saveBot() {
     const name = document.getElementById('botName').value.trim();
     const discordToken = document.getElementById('botToken').value.trim();
-    const aiProvider = document.getElementById('botProvider').value;
     const model = document.getElementById('botModel').value;
     const aiApiKey = document.getElementById('botApiKey').value.trim();
     const personality = document.getElementById('botPersonality').value.trim();
     const triggerMode = document.getElementById('botTrigger').value;
-    const prefix = document.getElementById('botPrefix').value;
     const editId = document.getElementById('editBotId').value;
     const isEdit = Boolean(editId);
 
@@ -2554,8 +2589,18 @@ async function saveBot() {
         showToast('Please fill in all required fields', 'error');
         return;
     }
+    if (!triggerMode) {
+        showToast('Choose a supported OpenClaw trigger mode', 'error');
+        return;
+    }
 
-    const payload = { name, aiProvider, model, personality, triggerMode, prefix };
+    const payload = {
+        name,
+        aiProvider: inferProviderFromModel(model),
+        model,
+        personality,
+        triggerMode
+    };
     if (discordToken) payload.discordToken = discordToken;
     if (aiApiKey) payload.aiApiKey = aiApiKey;
     if (!isEdit && selectedTemplate && Array.isArray(selectedTemplate.suggestedTools)) {
@@ -2572,7 +2617,7 @@ async function saveBot() {
         if (!res.ok) throw new Error(data.error);
 
         closeModal();
-        showToast(isEdit ? 'Bot updated ✅' : 'Bot created! Hit Start to deploy ✅');
+        showToast(isEdit ? 'OpenClaw bot updated ✅' : 'OpenClaw bot created. Hit Start to deploy ✅');
         await refreshBots();
     } catch (err) {
         showToast('Error: ' + err.message, 'error');
@@ -2612,14 +2657,7 @@ function renderBotDetail(bot) {
     const nameEl = document.getElementById('detailName');
     const metaEl = document.getElementById('detailMeta');
     nameEl.textContent = bot.name || 'Bot';
-    metaEl.textContent = `${bot.status || 'stopped'} | ${bot.aiProvider || 'openai'} | ${bot.model || 'gpt-4o-mini'}`;
-
-    const chart = document.getElementById('uptimeChart');
-    const uptime = generateUptimeBars(bot.id || '', bot.status);
-    chart.innerHTML = uptime.bars.map(height => `<div class="uptime-bar" style="height:${height}%"></div>`).join('');
-    const uptimeMeta = document.getElementById('uptimeMeta');
-    uptimeMeta.textContent = `${uptime.percent}% uptime - ${bot.messageCount || 0} messages processed`;
-    uptimeMeta.dataset.source = 'sample';
+    metaEl.textContent = `${bot.status || 'stopped'} | ${OPENCLAW_LABEL} | ${getOpenClawModelLabel(bot.model || 'gpt-4o-mini')}`;
 
     const servers = document.getElementById('detailServers');
     if (bot.guilds && bot.guilds.length) {
@@ -2633,7 +2671,7 @@ function renderBotDetail(bot) {
     const analyticsSent = document.getElementById('analyticsMessagesSent');
     const analyticsReceived = document.getElementById('analyticsMessagesReceived');
     const analyticsCommands = document.getElementById('analyticsCommands');
-    if (analyticsUptime) analyticsUptime.textContent = '--';
+    if (analyticsUptime) analyticsUptime.textContent = OPENCLAW_CAPABILITIES.runtimeTelemetry ? '--' : 'Unavailable';
     if (analyticsErrorRate) analyticsErrorRate.textContent = '--';
     if (analyticsSent) analyticsSent.textContent = '--';
     if (analyticsReceived) analyticsReceived.textContent = '--';
@@ -2869,7 +2907,7 @@ function renderSlashCommandList() {
     }
 
     if (!slashCommandState.commands.length) {
-        listEl.innerHTML = '<div class="empty-log">No slash commands yet.</div>';
+        listEl.innerHTML = '<div class="empty-log">No stored slash command definitions yet.</div>';
         return;
     }
 
@@ -2886,10 +2924,6 @@ function renderSlashCommandList() {
                         <span class="slash-pill ${enabledClass}">${enabledLabel}</span>
                     </div>
                     <div class="slash-item-desc">${esc(cmd.description || 'No description')}</div>
-                </div>
-                <div class="slash-item-actions">
-                    <button class="ghost-btn" onclick="editSlashCommand('${cmd.id}')">Edit</button>
-                    <button class="ghost-btn danger" onclick="deleteSlashCommand('${cmd.id}', '${esc(cmd.name || 'command')}')">Delete</button>
                 </div>
             </div>
         `;
@@ -2940,6 +2974,10 @@ function removeSlashOptionRow(button) {
 }
 
 function openSlashCommandForm(command = null) {
+    if (!OPENCLAW_CAPABILITIES.slashCommandPublishing) {
+        showToast('Slash command editing is disabled during the OpenClaw migration');
+        return;
+    }
     const badge = document.getElementById('slashFormBadge');
     const nameInput = document.getElementById('slashName');
     const descInput = document.getElementById('slashDescription');
@@ -3039,6 +3077,10 @@ function updateSlashPreview() {
 }
 
 async function saveSlashCommand() {
+    if (!OPENCLAW_CAPABILITIES.slashCommandPublishing) {
+        showToast('Slash command editing is disabled during the OpenClaw migration');
+        return;
+    }
     if (!activeDetailBotId) return;
     const nameInput = document.getElementById('slashName');
     const descInput = document.getElementById('slashDescription');
@@ -3088,6 +3130,10 @@ async function saveSlashCommand() {
 }
 
 function editSlashCommand(id) {
+    if (!OPENCLAW_CAPABILITIES.slashCommandPublishing) {
+        showToast('Slash command editing is disabled during the OpenClaw migration');
+        return;
+    }
     const command = slashCommandState.commands.find(cmd => cmd.id === id);
     if (!command) {
         showToast('Command not found', 'error');
@@ -3097,6 +3143,10 @@ function editSlashCommand(id) {
 }
 
 async function deleteSlashCommand(id, name) {
+    if (!OPENCLAW_CAPABILITIES.slashCommandPublishing) {
+        showToast('Slash command deletion is disabled during the OpenClaw migration');
+        return;
+    }
     if (!activeDetailBotId) return;
     if (!confirm(`Delete command \"/${name}\"? This cannot be undone.`)) return;
     try {
@@ -3115,6 +3165,10 @@ async function deleteSlashCommand(id, name) {
 }
 
 async function syncSlashCommands() {
+    if (!OPENCLAW_CAPABILITIES.slashCommandPublishing) {
+        showToast('Discord slash-command sync is unavailable in the OpenClaw migration');
+        return;
+    }
     if (!activeDetailBotId) return;
     try {
         const res = await fetch(`${API}/bots/${activeDetailBotId}/commands/sync`, {
@@ -3362,12 +3416,8 @@ function populateConfigPanel(bot) {
     const personality = document.getElementById('configPersonality');
     if (personality) personality.value = bot.personality || '';
 
-    updateConfigModelOptions(bot.aiProvider || 'openai', bot.model);
-
-    const triggerValue = bot.triggerMode || 'mention';
-    document.querySelectorAll('input[name="configTrigger"]').forEach(input => {
-        input.checked = input.value === triggerValue;
-    });
+    updateConfigModelOptions(bot.model);
+    populateConfigTriggerSelection(bot.triggerMode || OPENCLAW_DEFAULT_TRIGGER);
 
     renderToolToggles(Array.isArray(bot.tools) ? bot.tools : []);
 
@@ -3387,9 +3437,9 @@ function populateConfigPanel(bot) {
     setValue('rateBotDay', botLimits.perDay);
 }
 
-function updateConfigModelOptions(provider, selectedValue) {
+function updateConfigModelOptions(selectedValue) {
     const modelSelect = document.getElementById('configModel');
-    renderModelOptions(modelSelect, provider, selectedValue);
+    renderModelOptions(modelSelect, selectedValue);
 }
 
 function renderToolToggles(selectedTools) {
@@ -3446,9 +3496,14 @@ async function applyLiveConfig() {
     if (!activeDetailBotId) return;
     const personality = document.getElementById('configPersonality')?.value || '';
     const model = document.getElementById('configModel')?.value || '';
-    const triggerMode = document.querySelector('input[name="configTrigger"]:checked')?.value || 'mention';
+    const triggerMode = document.querySelector('input[name="configTrigger"]:checked')?.value || '';
     const tools = Array.from(document.querySelectorAll('#configTools input[type="checkbox"]:checked'))
         .map(input => input.value);
+
+    if (!triggerMode) {
+        showToast('Choose a supported OpenClaw trigger before applying changes', 'error');
+        return;
+    }
 
     const rateLimits = buildRateLimitsPayload();
     if (rateLimits === null) return;
@@ -3887,6 +3942,10 @@ function buildAutomodPayload() {
 }
 
 async function saveAutomodConfig() {
+    if (!OPENCLAW_CAPABILITIES.automodEnforcement) {
+        showToast('Auto-Mod enforcement is not live in the OpenClaw migration');
+        return;
+    }
     if (!activeDetailBotId) return;
     const payload = buildAutomodPayload();
     if (!payload) return;
@@ -3909,6 +3968,12 @@ async function saveAutomodConfig() {
 }
 
 async function loadAutomodLogs({ reset = false } = {}) {
+    if (!OPENCLAW_CAPABILITIES.automodEnforcement) {
+        automodState.logs = [];
+        automodState.loading = false;
+        renderAutomodLogs();
+        return;
+    }
     if (!activeDetailBotId || automodState.loading) return;
     if (reset) {
         automodState.logs = [];
@@ -3939,6 +4004,12 @@ function renderAutomodLogs() {
     const metaEl = document.getElementById('automodLogMeta');
     if (!listEl) return;
 
+    if (!OPENCLAW_CAPABILITIES.automodEnforcement) {
+        listEl.innerHTML = '<div class="empty-log">OpenClaw is not emitting live Auto-Mod actions in this build.</div>';
+        if (metaEl) metaEl.textContent = 'Enforcement disabled during migration';
+        return;
+    }
+
     if (automodState.loading && automodState.logs.length === 0) {
         listEl.innerHTML = '<div class="empty-log"><span class="spinner"></span>Loading automod actions…</div>';
     } else if (!automodState.logs.length) {
@@ -3966,6 +4037,7 @@ function renderAutomodLogs() {
 }
 
 function handleBotAutomodEvent(payload) {
+    if (!OPENCLAW_CAPABILITIES.automodEnforcement) return;
     if (!payload || payload.botId !== activeDetailBotId) return;
     const entry = {
         id: `live-${Date.now()}`,
@@ -3984,27 +4056,6 @@ function handleBotAutomodEvent(payload) {
         automodState.logs = automodState.logs.slice(0, automodState.limit);
     }
     renderAutomodLogs();
-}
-
-function generateUptimeBars(seed, status) {
-    const bars = [];
-    const base = status === 'running' ? 70 : status === 'starting' ? 55 : 35;
-    const hash = hashCode(seed);
-    for (let i = 0; i < 24; i++) {
-        const variance = Math.abs(Math.sin(hash + i) * 30);
-        bars.push(Math.min(100, Math.max(12, Math.round(base + variance))));
-    }
-    const percent = Math.min(99, Math.max(72, Math.round(base + 20)));
-    return { bars, percent };
-}
-
-function hashCode(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash) + str.charCodeAt(i);
-        hash |= 0;
-    }
-    return Math.abs(hash);
 }
 
 function setAnalyticsRange(range) {
@@ -4040,7 +4091,11 @@ function renderAnalytics(analytics) {
     const receivedEl = document.getElementById('analyticsMessagesReceived');
     const commandsEl = document.getElementById('analyticsCommands');
 
-    if (uptimeEl) uptimeEl.textContent = `${(analytics.totals.uptimePct || 0).toFixed(1)}%`;
+    if (uptimeEl) {
+        uptimeEl.textContent = OPENCLAW_CAPABILITIES.runtimeTelemetry
+            ? `${(analytics.totals.uptimePct || 0).toFixed(1)}%`
+            : 'Unavailable';
+    }
     if (errorRateEl) errorRateEl.textContent = `${(analytics.totals.errorRate || 0).toFixed(2)}%`;
     if (sentEl) {
         sentEl.textContent = analytics.totals.messagesSent || 0;
@@ -4062,7 +4117,7 @@ function renderAnalytics(analytics) {
     }
 
     renderMessageChart(analytics);
-    if (analytics.range && analytics.range.hours === 24) {
+    if (OPENCLAW_CAPABILITIES.runtimeTelemetry && analytics.range && analytics.range.hours === 24) {
         updateUptimeChartFromAnalytics(analytics);
     }
 }
@@ -4123,6 +4178,7 @@ function formatAnalyticsLabel(iso, hours) {
 }
 
 function updateUptimeChartFromAnalytics(analytics) {
+    if (!OPENCLAW_CAPABILITIES.runtimeTelemetry) return;
     const chart = document.getElementById('uptimeChart');
     const uptimeMeta = document.getElementById('uptimeMeta');
     if (!chart || !analytics.series) return;
