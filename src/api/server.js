@@ -15,6 +15,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { version: APP_VERSION } = require('../../package.json');
 const { BotManager } = require('../engine/BotManager');
+const { OpenClawManager } = require('../engine/OpenClawManager');
 const { AutoMod } = require('../engine/AutoMod');
 const { Scheduler } = require('../engine/Scheduler');
 const { personalityPresets } = require('../engine/PersonalityPresets');
@@ -95,7 +96,8 @@ const ADMIN_EMAILS = new Set(
 );
 
 const botManager = new BotManager();
-const scheduler = new Scheduler({ botManager, logBotEvent });
+const openclawManager = new OpenClawManager();
+const scheduler = new Scheduler({ botManager: openclawManager, logBotEvent });
 const webhookManager = new WebhookManager({ listWebhooks, logger: console });
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -534,17 +536,17 @@ app.get('/api/bots', auth, (req, res) => {
     const configs = listBotsByUser(req.userId);
     const bots = configs.map(config => {
         try {
-            const status = botManager.getBotStatus(config.id);
+            const status = openclawManager.getBotStatus(config.id);
             return maskBotForResponse(config, status);
         } catch {
-            return maskBotForResponse(config, { status: 'stopped' });
+            return maskBotForResponse(config, { status: 'stopped', engine: 'openclaw' });
         }
     });
     res.json({ bots });
 });
 
 // Create a new bot
-app.post('/api/bots', auth, validateCreateBot, (req, res) => {
+app.post('/api/bots', auth, validateCreateBot, async (req, res) => {
     try {
         const { name, discordToken, aiProvider, aiApiKey, model, personality, triggerMode, prefix, channels, collaborationMode, tools } = req.body;
         
@@ -571,13 +573,35 @@ app.post('/api/bots', auth, validateCreateBot, (req, res) => {
             createdAt: new Date()
         };
 
-        const storedConfig = createBotRecord(config);
-        logBotEvent(config.id, 'created', 'Bot created');
+        const provisioned = await openclawManager.createBot({
+            id: config.id,
+            name: config.name,
+            discordToken: config.discordToken,
+            aiProvider: config.aiProvider,
+            aiApiKey: config.aiApiKey,
+            model: config.model,
+            personality: config.personality,
+            triggerMode: config.triggerMode,
+            tools: config.tools,
+            channelIds: config.channels
+        });
 
-        botManager.createBot(storedConfig);
+        const storedConfig = createBotRecord({
+            ...config,
+            engine: 'openclaw',
+            openclawAgentId: provisioned.agentId,
+            openclawWorkspace: provisioned.workspaceDir,
+            openclawAgentDir: provisioned.agentDir
+        });
+        logBotEvent(config.id, 'created', 'OpenClaw bot created');
         scheduler.registerBot(storedConfig);
 
-        res.json({ bot: maskBotForResponse(storedConfig) });
+        res.json({
+            bot: maskBotForResponse(storedConfig, {
+                status: 'created',
+                engine: 'openclaw'
+            })
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -588,9 +612,9 @@ app.post('/api/bots/:id/start', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
-        const status = await botManager.startBot(config.id);
-        logBotEvent(config.id, 'started', 'Bot started');
+
+        const status = await openclawManager.startBot(config.id);
+        logBotEvent(config.id, 'started', 'OpenClaw bot started');
         res.json({ status });
     } catch (err) {
         logBotEvent(req.params.id, 'error', err.message);
@@ -603,9 +627,9 @@ app.post('/api/bots/:id/stop', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
-        const status = await botManager.stopBot(config.id);
-        logBotEvent(config.id, 'stopped', 'Bot stopped');
+
+        const status = await openclawManager.stopBot(config.id);
+        logBotEvent(config.id, 'stopped', 'OpenClaw bot stopped');
         res.json({ status });
     } catch (err) {
         logBotEvent(req.params.id, 'error', err.message);
@@ -618,14 +642,12 @@ app.put('/api/bots/:id', auth, validateBotIdParam, validateUpdateBot, async (req
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
-        // Update stored config
+
         const updates = req.body || {};
+        const nextConfig = { ...config, ...updates };
+        const status = await openclawManager.updateBot(config.id, nextConfig);
         updateBotRecord(req.userId, req.params.id, updates);
-        logBotEvent(req.params.id, 'updated', 'Bot updated');
-        
-        // Update running bot
-        const status = await botManager.updateBot(config.id, updates);
+        logBotEvent(req.params.id, 'updated', 'OpenClaw bot updated');
         res.json({ status });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -633,21 +655,16 @@ app.put('/api/bots/:id', auth, validateBotIdParam, validateUpdateBot, async (req
 });
 
 // Update bot config without restarting
-app.patch('/api/bots/:id/config', auth, validateBotIdParam, validateUpdateBotConfig, (req, res) => {
+app.patch('/api/bots/:id/config', auth, validateBotIdParam, validateUpdateBotConfig, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
         const updates = req.body || {};
+        const nextConfig = { ...config, ...updates };
+        const status = await openclawManager.updateBot(config.id, nextConfig);
         const storedConfig = updateBotRecord(req.userId, req.params.id, updates);
         logBotEvent(req.params.id, 'config-updated', 'Bot config updated (live)');
-
-        let status = null;
-        try {
-            status = botManager.updateBotConfig(config.id, updates);
-        } catch (err) {
-            console.warn(`[BotForge] Live config update skipped for ${config.id}:`, err.message);
-        }
 
         res.json({ bot: maskBotForResponse(storedConfig || config, status) });
     } catch (err) {
@@ -926,11 +943,11 @@ app.delete('/api/bots/:id', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
-        await botManager.removeBot(req.params.id);
+
+        await openclawManager.deleteBot(req.params.id);
         scheduler.unregisterBot(req.params.id);
         deleteBotRecord(req.userId, req.params.id);
-        
+
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -943,7 +960,7 @@ app.get('/api/bots/:id/status', auth, validateBotIdParam, (req, res) => {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
-        const status = botManager.getBotStatus(config.id);
+        const status = openclawManager.getBotStatus(config.id);
         res.json({ status });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1004,8 +1021,9 @@ app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, asyn
             return res.status(400).json({ error: 'Tools must be an array of tool names' });
         }
 
-        config.tools = tools;
-        const status = await botManager.updateBot(config.id, { tools });
+        const nextConfig = { ...config, tools };
+        const status = await openclawManager.updateBot(config.id, nextConfig);
+        updateBotRecord(req.userId, req.params.id, { tools });
         res.json({ status, tools });
     } catch (err) {
         res.status(500).json({ error: err.message });
