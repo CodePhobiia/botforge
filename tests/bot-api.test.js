@@ -57,6 +57,7 @@ async function registerAndGetToken(app, overrides = {}) {
 function buildBotPayload(overrides = {}) {
     return {
         name: 'Alpha Bot',
+        runtime: 'openclaw',
         discordToken: VALID_DISCORD_TOKEN,
         aiProvider: 'openai',
         aiApiKey: 'test-api-key',
@@ -68,6 +69,13 @@ function buildBotPayload(overrides = {}) {
         tools: ['calculator'],
         ...overrides
     };
+}
+
+function buildLegacyBotPayload(overrides = {}) {
+    return buildBotPayload({
+        runtime: 'legacy',
+        ...overrides
+    });
 }
 
 describe('Bot management API', () => {
@@ -94,6 +102,7 @@ describe('Bot management API', () => {
         expect(createRes.status).toBe(200);
         const botId = createRes.body.bot.id;
         expect(createRes.body.bot.discordToken).toBe('***');
+        expect(createRes.body.bot.runtime).toBe('openclaw');
 
         const listRes = await request(app)
             .get('/api/bots')
@@ -101,6 +110,8 @@ describe('Bot management API', () => {
 
         expect(listRes.status).toBe(200);
         expect(listRes.body.bots).toHaveLength(1);
+        expect(listRes.body.bots[0].runtime).toBe('openclaw');
+        expect(listRes.body.bots[0].status).toBe('external');
 
         const getRes = await request(app)
             .get(`/api/bots/${botId}/status`)
@@ -108,6 +119,7 @@ describe('Bot management API', () => {
 
         expect(getRes.status).toBe(200);
         expect(getRes.body.status).toBeDefined();
+        expect(getRes.body.status.runtime).toBe('openclaw');
 
         const updateRes = await request(app)
             .put(`/api/bots/${botId}`)
@@ -196,7 +208,7 @@ describe('Bot management API', () => {
         const createRes = await request(app)
             .post('/api/bots')
             .set('Authorization', `Bearer ${token}`)
-            .send(buildBotPayload());
+            .send(buildLegacyBotPayload());
 
         const botId = createRes.body.bot.id;
 
@@ -214,6 +226,46 @@ describe('Bot management API', () => {
         expect(res.body.analytics.totals.messagesSent).toBe(1);
 
         jest.useRealTimers();
+    });
+
+    test('OpenClaw lifecycle is external and legacy-only endpoints are explicit', async () => {
+        const token = await registerAndGetToken(app, { email: 'openclaw@example.com' });
+        const createRes = await request(app)
+            .post('/api/bots')
+            .set('Authorization', `Bearer ${token}`)
+            .send(buildBotPayload());
+
+        const botId = createRes.body.bot.id;
+
+        const startRes = await request(app)
+            .post(`/api/bots/${botId}/start`)
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(startRes.status).toBe(202);
+        expect(startRes.body.executed).toBe(false);
+        expect(startRes.body.status.runtime).toBe('openclaw');
+        expect(startRes.body.status.desiredStatus).toBe('running');
+
+        const logsRes = await request(app)
+            .get(`/api/bots/${botId}/logs`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(logsRes.status).toBe(501);
+        expect(logsRes.body.code).toBe('OPENCLAW_UNSUPPORTED');
+
+        const healthRes = await request(app)
+            .get(`/api/bots/${botId}/health`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(healthRes.status).toBe(501);
+
+        const analyticsRes = await request(app)
+            .get(`/api/bots/${botId}/analytics`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(analyticsRes.status).toBe(501);
+
+        const syncRes = await request(app)
+            .post(`/api/bots/${botId}/commands/sync`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(syncRes.status).toBe(501);
     });
 
     test('auth middleware (missing, invalid, expired token)', async () => {

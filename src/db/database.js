@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const { encrypt, decrypt } = require('./encryption');
+const { DEFAULT_BOT_RUNTIME, normalizeBotRuntime } = require('../runtime/runtime-utils');
 
 const DATA_DIR = path.join(__dirname, '../../data');
 const DB_PATH = process.env.BOTFORGE_DB_PATH || path.join(DATA_DIR, 'botforge.db');
@@ -34,6 +35,7 @@ function ensureBotColumns(database) {
     addColumn('rate_limits_json', 'TEXT');
     addColumn('automod_config_json', 'TEXT');
     addColumn('schedule_json', 'TEXT');
+    addColumn('runtime', `TEXT NOT NULL DEFAULT '${DEFAULT_BOT_RUNTIME}'`);
 }
 
 function initDatabase() {
@@ -66,6 +68,7 @@ function initDatabase() {
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
             name TEXT NOT NULL,
+            runtime TEXT NOT NULL DEFAULT '${DEFAULT_BOT_RUNTIME}',
             discord_token_encrypted TEXT NOT NULL,
             ai_provider TEXT NOT NULL,
             ai_api_key_encrypted TEXT NOT NULL,
@@ -204,12 +207,12 @@ const statements = {
     `),
     insertBot: database.prepare(`
         INSERT INTO bots (
-            id, user_id, name, discord_token_encrypted, ai_provider,
+            id, user_id, name, runtime, discord_token_encrypted, ai_provider,
             ai_api_key_encrypted, model, personality, trigger_mode, prefix,
             channels_json, tools_json, rate_limits_json, automod_config_json, schedule_json, max_tokens, history_limit,
             created_at, updated_at
         ) VALUES (
-            @id, @user_id, @name, @discord_token_encrypted, @ai_provider,
+            @id, @user_id, @name, @runtime, @discord_token_encrypted, @ai_provider,
             @ai_api_key_encrypted, @model, @personality, @trigger_mode, @prefix,
             @channels_json, @tools_json, @rate_limits_json, @automod_config_json, @schedule_json, @max_tokens, @history_limit,
             @created_at, @updated_at
@@ -218,6 +221,7 @@ const statements = {
     updateBot: database.prepare(`
         UPDATE bots SET
             name = @name,
+            runtime = @runtime,
             discord_token_encrypted = @discord_token_encrypted,
             ai_provider = @ai_provider,
             ai_api_key_encrypted = @ai_api_key_encrypted,
@@ -303,7 +307,7 @@ const statements = {
     `),
     getLatestStatusLog: database.prepare(`
         SELECT * FROM bot_logs
-        WHERE bot_id = ? AND event_type IN ('started', 'stopped')
+        WHERE bot_id = ? AND event_type IN ('started', 'stopped', 'start_requested', 'stop_requested')
         ORDER BY created_at DESC, id DESC
         LIMIT 1
     `),
@@ -433,6 +437,7 @@ function mapBotRow(row) {
         id: row.id,
         userId: row.user_id,
         name: row.name,
+        runtime: normalizeBotRuntime(row.runtime),
         discordToken: decrypt(row.discord_token_encrypted),
         aiProvider: row.ai_provider,
         aiApiKey: decrypt(row.ai_api_key_encrypted),
@@ -592,10 +597,12 @@ function createBot(config) {
     const updatedAt = config.updatedAt ? toIso(config.updatedAt) : createdAt;
     const channelsValue = config.channels === undefined ? [] : config.channels;
     const toolsValue = config.tools === undefined ? [] : config.tools;
+    const runtime = normalizeBotRuntime(config.runtime);
     const payload = {
         id: config.id,
         user_id: config.userId,
         name: config.name,
+        runtime,
         discord_token_encrypted: encrypt(config.discordToken),
         ai_provider: config.aiProvider,
         ai_api_key_encrypted: encrypt(config.aiApiKey),
@@ -616,6 +623,7 @@ function createBot(config) {
     statements.insertBot.run(payload);
     return {
         ...config,
+        runtime,
         createdAt: new Date(createdAt),
         updatedAt: new Date(updatedAt)
     };
@@ -652,6 +660,9 @@ function updateBot(userId, botId, updates) {
     const hasProp = (key) => Object.prototype.hasOwnProperty.call(updates, key);
 
     if (hasProp('name')) config.name = updates.name;
+    if (hasProp('runtime') || hasProp('runtimeType') || hasProp('engine')) {
+        config.runtime = normalizeBotRuntime(updates.runtime ?? updates.runtimeType ?? updates.engine);
+    }
     if (hasProp('discordToken')) config.discordToken = updates.discordToken;
     if (hasProp('aiProvider')) config.aiProvider = updates.aiProvider;
     if (hasProp('aiApiKey')) config.aiApiKey = updates.aiApiKey;
@@ -676,6 +687,7 @@ function updateBot(userId, botId, updates) {
         id: botId,
         user_id: userId,
         name: config.name,
+        runtime: normalizeBotRuntime(config.runtime),
         discord_token_encrypted: encrypt(config.discordToken),
         ai_provider: config.aiProvider,
         ai_api_key_encrypted: encrypt(config.aiApiKey),

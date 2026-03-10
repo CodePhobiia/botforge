@@ -19,6 +19,8 @@ const { AutoMod } = require('../engine/AutoMod');
 const { Scheduler } = require('../engine/Scheduler');
 const { personalityPresets } = require('../engine/PersonalityPresets');
 const { WebhookManager } = require('../engine/WebhookManager');
+const { RuntimeManager } = require('../runtime/RuntimeManager');
+const { DEFAULT_BOT_RUNTIME, resolveBotRuntime, isOpenClawRuntime } = require('../runtime/runtime-utils');
 const { securityHeaders, corsMiddleware, jsonBodyParser, urlencodedBodyParser, requestIdMiddleware } = require('../middleware/security');
 const { apiRateLimiter, authRateLimiter } = require('../middleware/rateLimit');
 const { buildDiscordAuthUrl, getDiscordRedirectUri, handleDiscordCallback } = require('../auth/discord-oauth');
@@ -94,8 +96,15 @@ const ADMIN_EMAILS = new Set(
         .filter(Boolean)
 );
 
-const botManager = new BotManager();
-const scheduler = new Scheduler({ botManager, logBotEvent });
+const legacyBotManager = new BotManager();
+const runtimeManager = new RuntimeManager({
+    legacyManager: legacyBotManager,
+    getLatestBotStatusEvent,
+    listBotsByUser,
+    listAllBots,
+    logger: console
+});
+const scheduler = new Scheduler({ botManager: legacyBotManager, botController: runtimeManager, logBotEvent });
 const webhookManager = new WebhookManager({ listWebhooks, logger: console });
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -158,6 +167,31 @@ function normalizeAutomodConfig(raw) {
     return AutoMod.normalizeConfig(sanitized);
 }
 
+function normalizeBotRuntimeInput(value) {
+    return resolveBotRuntime({ runtime: value });
+}
+
+function isOpenClawBot(config) {
+    return isOpenClawRuntime(config);
+}
+
+function getBotStatus(config) {
+    return runtimeManager.getBotStatus(config.id, { config });
+}
+
+function respondUnsupportedRuntimeFeature(res, config, feature, { statusCode = 501 } = {}) {
+    return res.status(statusCode).json({
+        error: `${feature} is unavailable for OpenClaw bots from this backend`,
+        code: 'OPENCLAW_UNSUPPORTED',
+        runtime: normalizeBotRuntimeInput(config?.runtime),
+        feature
+    });
+}
+
+function getLifecycleResponseCode(result) {
+    return result?.executed === false ? 202 : 200;
+}
+
 function getCorsStatus() {
     const raw = process.env.CORS_ORIGINS;
     if (raw) {
@@ -199,12 +233,14 @@ function logStartupBanner() {
 // ============ HEALTH ============
 
 app.get('/api/health', (req, res) => {
-    const stats = botManager.getStats();
+    const stats = runtimeManager.getStats();
     res.json({
         status: 'ok',
         uptime: process.uptime(),
         version: APP_VERSION,
-        bots_running: stats.running
+        bots_running: stats.running,
+        bots_external: stats.external,
+        bots_total: stats.total
     });
 });
 
@@ -225,7 +261,7 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
     if (!socket.userId) return;
     socket.join(socket.userId);
-    socket.emit('bots_snapshot', botManager.getAllBots(socket.userId));
+    socket.emit('bots_snapshot', runtimeManager.getAllBots(socket.userId));
 });
 
 function emitToUser(userId, event, payload) {
@@ -233,7 +269,7 @@ function emitToUser(userId, event, payload) {
     io.to(userId).emit(event, payload);
 }
 
-botManager.on('status', (payload) => {
+legacyBotManager.on('status', (payload) => {
     emitToUser(payload.userId, 'bot_status', payload);
     if (payload.status === 'running' && payload.previousStatus !== 'running') {
         webhookManager.dispatch('bot_started', payload).catch((err) => {
@@ -246,7 +282,7 @@ botManager.on('status', (payload) => {
     }
 });
 
-botManager.on('message', (payload) => {
+legacyBotManager.on('message', (payload) => {
     emitToUser(payload.userId, 'bot_message', payload);
     if (payload.direction === 'received') {
         recordBotMessageReceived(payload.botId, payload.command, payload.timestamp);
@@ -258,7 +294,7 @@ botManager.on('message', (payload) => {
     }
 });
 
-botManager.on('error', (payload) => {
+legacyBotManager.on('error', (payload) => {
     emitToUser(payload.userId, 'bot_error', payload);
     recordBotError(payload.botId, payload.timestamp);
     webhookManager.dispatch('bot_error', payload).catch((err) => {
@@ -266,11 +302,11 @@ botManager.on('error', (payload) => {
     });
 });
 
-botManager.on('uptime', (payload) => {
+legacyBotManager.on('uptime', (payload) => {
     recordBotUptime(payload.botId, payload.startAt, payload.endAt);
 });
 
-botManager.on('automod', (payload) => {
+legacyBotManager.on('automod', (payload) => {
     emitToUser(payload.userId, 'bot_automod', payload);
     webhookManager.dispatch('automod_action', payload).catch((err) => {
         console.warn('[WebhookManager] automod_action dispatch failed:', err.message);
@@ -534,7 +570,7 @@ app.get('/api/bots', auth, (req, res) => {
     const configs = listBotsByUser(req.userId);
     const bots = configs.map(config => {
         try {
-            const status = botManager.getBotStatus(config.id);
+            const status = getBotStatus(config);
             return maskBotForResponse(config, status);
         } catch {
             return maskBotForResponse(config, { status: 'stopped' });
@@ -544,7 +580,7 @@ app.get('/api/bots', auth, (req, res) => {
 });
 
 // Create a new bot
-app.post('/api/bots', auth, validateCreateBot, (req, res) => {
+app.post('/api/bots', auth, validateCreateBot, async (req, res) => {
     try {
         const { name, discordToken, aiProvider, aiApiKey, model, personality, triggerMode, prefix, channels, collaborationMode, tools } = req.body;
         
@@ -556,6 +592,7 @@ app.post('/api/bots', auth, validateCreateBot, (req, res) => {
             id: uuidv4(),
             userId: req.userId,
             name,
+            runtime: normalizeBotRuntimeInput(req.body.runtime ?? DEFAULT_BOT_RUNTIME),
             discordToken,
             aiProvider: aiProvider || 'openai',
             aiApiKey,
@@ -574,7 +611,7 @@ app.post('/api/bots', auth, validateCreateBot, (req, res) => {
         const storedConfig = createBotRecord(config);
         logBotEvent(config.id, 'created', 'Bot created');
 
-        botManager.createBot(storedConfig);
+        await runtimeManager.createBot(storedConfig);
         scheduler.registerBot(storedConfig);
 
         res.json({ bot: maskBotForResponse(storedConfig) });
@@ -588,10 +625,14 @@ app.post('/api/bots/:id/start', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
-        const status = await botManager.startBot(config.id);
-        logBotEvent(config.id, 'started', 'Bot started');
-        res.json({ status });
+
+        const result = await runtimeManager.startBot(config.id, { config });
+        logBotEvent(config.id, result.eventType, result.message);
+        res.status(getLifecycleResponseCode(result)).json({
+            status: result.status,
+            executed: result.executed,
+            message: result.message
+        });
     } catch (err) {
         logBotEvent(req.params.id, 'error', err.message);
         res.status(500).json({ error: err.message });
@@ -603,10 +644,14 @@ app.post('/api/bots/:id/stop', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
-        const status = await botManager.stopBot(config.id);
-        logBotEvent(config.id, 'stopped', 'Bot stopped');
-        res.json({ status });
+
+        const result = await runtimeManager.stopBot(config.id, { config });
+        logBotEvent(config.id, result.eventType, result.message);
+        res.status(getLifecycleResponseCode(result)).json({
+            status: result.status,
+            executed: result.executed,
+            message: result.message
+        });
     } catch (err) {
         logBotEvent(req.params.id, 'error', err.message);
         res.status(500).json({ error: err.message });
@@ -621,11 +666,12 @@ app.put('/api/bots/:id', auth, validateBotIdParam, validateUpdateBot, async (req
         
         // Update stored config
         const updates = req.body || {};
-        updateBotRecord(req.userId, req.params.id, updates);
+        const storedConfig = updateBotRecord(req.userId, req.params.id, updates);
         logBotEvent(req.params.id, 'updated', 'Bot updated');
         
         // Update running bot
-        const status = await botManager.updateBot(config.id, updates);
+        const result = await runtimeManager.updateBot(config.id, storedConfig, { previousConfig: config });
+        const status = result?.status || getBotStatus(storedConfig);
         res.json({ status });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -644,7 +690,7 @@ app.patch('/api/bots/:id/config', auth, validateBotIdParam, validateUpdateBotCon
 
         let status = null;
         try {
-            status = botManager.updateBotConfig(config.id, updates);
+            status = runtimeManager.updateBotConfig(config.id, updates, { config: storedConfig || config });
         } catch (err) {
             console.warn(`[BotForge] Live config update skipped for ${config.id}:`, err.message);
         }
@@ -882,7 +928,7 @@ app.put('/api/bots/:id/automod', auth, validateBotIdParam, (req, res) => {
         logBotEvent(req.params.id, 'automod-updated', 'AutoMod config updated');
 
         try {
-            botManager.updateBotAutomod(config.id, automodConfig);
+            runtimeManager.updateBotAutomod(config.id, automodConfig, { config: storedConfig || config });
         } catch (err) {
             console.warn(`[BotForge] Live automod update skipped for ${config.id}:`, err.message);
         }
@@ -926,8 +972,8 @@ app.delete('/api/bots/:id', auth, validateBotIdParam, async (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
-        
-        await botManager.removeBot(req.params.id);
+
+        await runtimeManager.removeBot(req.params.id, { config });
         scheduler.unregisterBot(req.params.id);
         deleteBotRecord(req.userId, req.params.id);
         
@@ -943,7 +989,7 @@ app.get('/api/bots/:id/status', auth, validateBotIdParam, (req, res) => {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
-        const status = botManager.getBotStatus(config.id);
+        const status = getBotStatus(config);
         res.json({ status });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -956,7 +1002,11 @@ app.get('/api/bots/:id/logs', auth, validateBotIdParam, (req, res) => {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
-        const logs = botManager.getBotLogs(config.id);
+        if (isOpenClawBot(config)) {
+            return respondUnsupportedRuntimeFeature(res, config, 'logs');
+        }
+
+        const logs = runtimeManager.getBotLogs(config.id, { config });
         res.json({ logs });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -969,7 +1019,11 @@ app.get('/api/bots/:id/health', auth, validateBotIdParam, (req, res) => {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
-        const health = botManager.getBotHealth(config.id);
+        if (isOpenClawBot(config)) {
+            return respondUnsupportedRuntimeFeature(res, config, 'health');
+        }
+
+        const health = runtimeManager.getBotHealth(config.id, { config });
         res.json({ health });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -981,6 +1035,10 @@ app.get('/api/bots/:id/analytics', auth, validateBotIdParam, (req, res) => {
     try {
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
+
+        if (isOpenClawBot(config)) {
+            return respondUnsupportedRuntimeFeature(res, config, 'analytics');
+        }
 
         const range = (req.query.range || '24h').toString();
         const rangeMap = { '24h': 24, '7d': 168, '30d': 720 };
@@ -1005,7 +1063,9 @@ app.post('/api/bots/:id/tools', auth, validateBotIdParam, validateBotTools, asyn
         }
 
         config.tools = tools;
-        const status = await botManager.updateBot(config.id, { tools });
+        const storedConfig = updateBotRecord(req.userId, req.params.id, { tools });
+        const result = await runtimeManager.updateBot(config.id, storedConfig, { previousConfig: config });
+        const status = result?.status || getBotStatus(storedConfig);
         res.json({ status, tools });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1089,9 +1149,18 @@ app.delete('/api/bots/:id/commands/:cmdId', auth, validateBotIdParam, async (req
         const deleted = deleteSlashCommand(config.id, cmdId);
         if (!deleted) return res.status(404).json({ error: 'Command not found' });
 
+        if (isOpenClawBot(config)) {
+            return res.json({
+                success: true,
+                synced: false,
+                syncUnavailable: true,
+                runtime: normalizeBotRuntimeInput(config.runtime)
+            });
+        }
+
         let synced = false;
         try {
-            await botManager.syncSlashCommands(config.id);
+            await runtimeManager.syncSlashCommands(config.id, { config });
             synced = true;
         } catch (err) {
             console.warn(`[BotForge] Slash command sync skipped for ${config.id}:`, err.message);
@@ -1108,7 +1177,11 @@ app.post('/api/bots/:id/commands/sync', auth, validateBotIdParam, async (req, re
         const config = getBotById(req.userId, req.params.id);
         if (!config) return res.status(404).json({ error: 'Bot not found' });
 
-        const result = await botManager.syncSlashCommands(config.id);
+        if (isOpenClawBot(config)) {
+            return respondUnsupportedRuntimeFeature(res, config, 'slash sync');
+        }
+
+        const result = await runtimeManager.syncSlashCommands(config.id, { config });
         res.json({ synced: true, result });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -1174,19 +1247,20 @@ app.get('/api/bots/:id/conversations/export', auth, validateBotIdParam, (req, re
 
 // Platform stats
 app.get('/api/stats', (req, res) => {
-    res.json({ stats: botManager.getStats() });
+    res.json({ stats: runtimeManager.getStats() });
 });
 
 // ============ ADMIN ============
 
 app.get('/api/admin/stats', auth, adminOnly, (req, res) => {
     try {
-        const stats = botManager.getStats();
+        const stats = runtimeManager.getStats();
         res.json({
             stats: {
                 totalUsers: getUserCount(),
                 totalBots: getBotCount(),
                 botsRunning: stats.running,
+                botsExternal: stats.external,
                 totalMessages: stats.totalMessages,
                 uptime: process.uptime()
             }
@@ -1211,7 +1285,7 @@ app.get('/api/admin/bots', auth, adminOnly, (req, res) => {
         const bots = configs.map((config) => {
             let status = null;
             try {
-                status = botManager.getBotStatus(config.id);
+                status = getBotStatus(config);
             } catch {
                 status = { status: 'stopped' };
             }
@@ -1227,7 +1301,7 @@ async function bootstrapBots() {
     const configs = listAllBots();
     for (const config of configs) {
         try {
-            await botManager.createBot(config);
+            await runtimeManager.createBot(config);
             scheduler.registerBot(config);
         } catch (err) {
             console.error(`[BotForge] Failed to load bot ${config.id}:`, err.message);
@@ -1237,12 +1311,13 @@ async function bootstrapBots() {
     scheduler.start();
 
     for (const config of configs) {
+        if (isOpenClawBot(config)) continue;
         if (config.schedule) continue;
         const lastStatus = getLatestBotStatusEvent(config.id);
         if (lastStatus?.eventType === 'started') {
             try {
-                await botManager.startBot(config.id);
-                logBotEvent(config.id, 'started', 'Auto-started on boot');
+                const result = await runtimeManager.startBot(config.id, { config });
+                logBotEvent(config.id, result.eventType, 'Auto-started on boot');
             } catch (err) {
                 logBotEvent(config.id, 'error', err.message);
                 console.error(`[BotForge] Auto-start failed for ${config.id}:`, err.message);
@@ -1297,7 +1372,7 @@ async function shutdown(signal) {
     const serverClose = new Promise((resolve) => server.close(resolve));
 
     try {
-        await botManager.stopAllBots();
+        await runtimeManager.stopAllBots();
     } catch (err) {
         console.error('[BotForge] Error while stopping bots:', err.message);
     }

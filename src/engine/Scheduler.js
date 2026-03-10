@@ -173,9 +173,9 @@ function cronMatches(job, minuteDate) {
 }
 
 class Scheduler extends EventEmitter {
-    constructor({ botManager, logBotEvent, logger } = {}) {
+    constructor({ botManager, botController, logBotEvent, logger } = {}) {
         super();
-        this.botManager = botManager;
+        this.botController = botController || botManager;
         this.logBotEvent = logBotEvent;
         this.logger = logger || console;
         this.botMeta = new Map();
@@ -280,12 +280,12 @@ class Scheduler extends EventEmitter {
 
         let status;
         try {
-            status = this.botManager.getBotStatus(entry.botId);
+            status = this.botController.getBotStatus(entry.botId);
         } catch {
             return;
         }
 
-        const state = status?.status || 'stopped';
+        const state = status?.desiredStatus || status?.status || 'stopped';
 
         if (shouldRun && (state === 'stopped' || state === 'error')) {
             await this._startBot(entry, status);
@@ -322,15 +322,20 @@ class Scheduler extends EventEmitter {
     async _startBot(entry, status) {
         this.inFlight.add(entry.botId);
         try {
-            await this.botManager.startBot(entry.botId);
-            this._logScheduleEvent(entry, 'started', `Scheduled start${this._scheduleLabel(entry)}`);
+            const result = await this.botController.startBot(entry.botId);
+            const eventType = result?.eventType || 'started';
+            const message = result?.executed === false
+                ? `Scheduled start request${this._scheduleLabel(entry)}`
+                : `Scheduled start${this._scheduleLabel(entry)}`;
+            this._logScheduleEvent(entry, eventType, message);
             this.emit('schedule', {
                 botId: entry.botId,
                 userId: entry.userId,
                 name: entry.name,
-                action: 'start',
+                action: result?.executed === false ? 'start_requested' : 'start',
                 schedule: entry.schedule,
                 previousStatus: status?.status,
+                status: result?.status || status,
                 timestamp: new Date().toISOString()
             });
         } catch (err) {
@@ -343,15 +348,20 @@ class Scheduler extends EventEmitter {
     async _stopBot(entry, status) {
         this.inFlight.add(entry.botId);
         try {
-            await this.botManager.stopBot(entry.botId);
-            this._logScheduleEvent(entry, 'stopped', `Scheduled stop${this._scheduleLabel(entry)}`);
+            const result = await this.botController.stopBot(entry.botId);
+            const eventType = result?.eventType || 'stopped';
+            const message = result?.executed === false
+                ? `Scheduled stop request${this._scheduleLabel(entry)}`
+                : `Scheduled stop${this._scheduleLabel(entry)}`;
+            this._logScheduleEvent(entry, eventType, message);
             this.emit('schedule', {
                 botId: entry.botId,
                 userId: entry.userId,
                 name: entry.name,
-                action: 'stop',
+                action: result?.executed === false ? 'stop_requested' : 'stop',
                 schedule: entry.schedule,
                 previousStatus: status?.status,
+                status: result?.status || status,
                 timestamp: new Date().toISOString()
             });
         } catch (err) {

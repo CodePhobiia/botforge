@@ -34,6 +34,7 @@ const ALLOWED_WEBHOOK_EVENTS = new Set([
     'schedule_event'
 ]);
 const { normalizeSchedule } = require('../engine/Scheduler');
+const { normalizeBotRuntime, isKnownBotRuntimeValue } = require('../runtime/runtime-utils');
 
 function stripHtml(input) {
     return input.replace(/<[^>]*>/g, '');
@@ -198,6 +199,9 @@ function validateCreateBot(req, res, next) {
     req.body = sanitizeObject(req.body || {});
     const {
         name,
+        runtime,
+        runtimeType,
+        engine,
         discordToken,
         aiProvider,
         aiApiKey,
@@ -209,9 +213,14 @@ function validateCreateBot(req, res, next) {
         collaborationMode,
         tools
     } = req.body;
+    const runtimeInput = runtime ?? runtimeType ?? engine;
+    const normalizedRuntime = normalizeBotRuntime(runtime ?? runtimeType ?? engine);
 
     if (!validateName(name, LIMITS.botNameMin, LIMITS.botNameMax)) {
         return badRequest(res, `Bot name must be ${LIMITS.botNameMin}-${LIMITS.botNameMax} characters`);
+    }
+    if (runtimeInput !== undefined && !isKnownBotRuntimeValue(runtimeInput)) {
+        return badRequest(res, 'Unsupported bot runtime');
     }
     if (!validateDiscordToken(discordToken)) {
         return badRequest(res, 'Valid Discord token required');
@@ -254,12 +263,22 @@ function validateCreateBot(req, res, next) {
         return badRequest(res, 'Invalid collaboration mode');
     }
 
+    req.body.runtime = normalizedRuntime;
+
     return next();
 }
 
 function validateUpdateBot(req, res, next) {
     req.body = sanitizeObject(req.body || {});
     const updates = req.body;
+    const runtimeInput = updates.runtime ?? updates.runtimeType ?? updates.engine;
+
+    if (runtimeInput !== undefined) {
+        if (!isKnownBotRuntimeValue(runtimeInput)) {
+            return badRequest(res, 'Unsupported bot runtime');
+        }
+        updates.runtime = normalizeBotRuntime(runtimeInput);
+    }
 
     if (updates.name !== undefined && !validateName(updates.name, LIMITS.botNameMin, LIMITS.botNameMax)) {
         return badRequest(res, `Bot name must be ${LIMITS.botNameMin}-${LIMITS.botNameMax} characters`);
