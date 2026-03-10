@@ -36,15 +36,8 @@ jest.mock('uuid', () => {
     };
 });
 
-jest.mock('child_process', () => ({
-    execSync: jest.fn()
-}));
-
-const fs = require('fs');
-const path = require('path');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
-const childProcess = require('child_process');
 const { createTestApp } = require('./helpers');
 
 const VALID_DISCORD_TOKEN = `${'a'.repeat(24)}.${'b'.repeat(7)}.${'c'.repeat(12)}`;
@@ -64,6 +57,7 @@ async function registerAndGetToken(app, overrides = {}) {
 function buildBotPayload(overrides = {}) {
     return {
         name: 'Alpha Bot',
+        runtime: 'openclaw',
         discordToken: VALID_DISCORD_TOKEN,
         aiProvider: 'openai',
         aiApiKey: 'test-api-key',
@@ -77,24 +71,20 @@ function buildBotPayload(overrides = {}) {
     };
 }
 
-function authProfilesPath(homeDir, botId) {
-    return path.join(homeDir, '.openclaw', 'agents', `bf-${botId}`, 'agent', 'auth-profiles.json');
-}
-
-function openClawConfigPath(homeDir) {
-    return path.join(homeDir, '.openclaw', 'openclaw.json');
+function buildLegacyBotPayload(overrides = {}) {
+    return buildBotPayload({
+        runtime: 'legacy',
+        ...overrides
+    });
 }
 
 describe('Bot management API', () => {
     let app;
     let db;
-    let homeDir;
     let cleanup;
 
     beforeEach(() => {
-        ({ app, db, homeDir, cleanup } = createTestApp());
-        childProcess.execSync.mockReset();
-        childProcess.execSync.mockReturnValue(Buffer.from('ok'));
+        ({ app, db, cleanup } = createTestApp());
     });
 
     afterEach(() => {
@@ -112,20 +102,7 @@ describe('Bot management API', () => {
         expect(createRes.status).toBe(200);
         const botId = createRes.body.bot.id;
         expect(createRes.body.bot.discordToken).toBe('***');
-        expect(createRes.body.bot.status).toBe('created');
-        expect(createRes.body.bot.engine).toBe('openclaw');
-
-        const authStore = JSON.parse(fs.readFileSync(authProfilesPath(homeDir, botId), 'utf-8'));
-        expect(authStore).toEqual({
-            version: 1,
-            profiles: {
-                'openai:default': {
-                    type: 'api_key',
-                    provider: 'openai',
-                    key: 'test-api-key'
-                }
-            }
-        });
+        expect(createRes.body.bot.runtime).toBe('openclaw');
 
         const listRes = await request(app)
             .get('/api/bots')
@@ -133,7 +110,8 @@ describe('Bot management API', () => {
 
         expect(listRes.status).toBe(200);
         expect(listRes.body.bots).toHaveLength(1);
-        expect(listRes.body.bots[0].status).toBe('stopped');
+        expect(listRes.body.bots[0].runtime).toBe('openclaw');
+        expect(listRes.body.bots[0].status).toBe('external');
 
         const getRes = await request(app)
             .get(`/api/bots/${botId}/status`)
@@ -141,7 +119,7 @@ describe('Bot management API', () => {
 
         expect(getRes.status).toBe(200);
         expect(getRes.body.status).toBeDefined();
-        expect(getRes.body.status.status).toBe('stopped');
+        expect(getRes.body.status.runtime).toBe('openclaw');
 
         const updateRes = await request(app)
             .put(`/api/bots/${botId}`)
@@ -165,66 +143,6 @@ describe('Bot management API', () => {
             .get('/api/bots')
             .set('Authorization', `Bearer ${token}`);
         expect(listAfterDelete.body.bots).toHaveLength(0);
-    });
-
-    test('start failure rolls config back and keeps status stopped', async () => {
-        const token = await registerAndGetToken(app, { email: 'startfail@example.com' });
-        const createRes = await request(app)
-            .post('/api/bots')
-            .set('Authorization', `Bearer ${token}`)
-            .send(buildBotPayload());
-
-        const botId = createRes.body.bot.id;
-        childProcess.execSync.mockImplementationOnce(() => {
-            throw new Error('gateway boom');
-        });
-
-        const startRes = await request(app)
-            .post(`/api/bots/${botId}/start`)
-            .set('Authorization', `Bearer ${token}`);
-
-        expect(startRes.status).toBe(500);
-
-        const statusRes = await request(app)
-            .get(`/api/bots/${botId}/status`)
-            .set('Authorization', `Bearer ${token}`);
-
-        expect(statusRes.status).toBe(200);
-        expect(statusRes.body.status.status).toBe('stopped');
-
-        const openclawConfig = JSON.parse(fs.readFileSync(openClawConfigPath(homeDir), 'utf-8'));
-        expect(openclawConfig.channels.discord.accounts[`bf-${botId}`].enabled).toBe(false);
-    });
-
-    test('update failure does not drift db or OpenClaw config', async () => {
-        const token = await registerAndGetToken(app, { email: 'updatefail@example.com' });
-        const createRes = await request(app)
-            .post('/api/bots')
-            .set('Authorization', `Bearer ${token}`)
-            .send(buildBotPayload());
-
-        const botId = createRes.body.bot.id;
-        childProcess.execSync.mockImplementationOnce(() => {
-            throw new Error('reload failed');
-        });
-
-        const updateRes = await request(app)
-            .put(`/api/bots/${botId}`)
-            .set('Authorization', `Bearer ${token}`)
-            .send({ name: 'Broken Rename' });
-
-        expect(updateRes.status).toBe(500);
-
-        const listRes = await request(app)
-            .get('/api/bots')
-            .set('Authorization', `Bearer ${token}`);
-
-        expect(listRes.status).toBe(200);
-        expect(listRes.body.bots[0].name).toBe('Alpha Bot');
-
-        const openclawConfig = JSON.parse(fs.readFileSync(openClawConfigPath(homeDir), 'utf-8'));
-        const agent = openclawConfig.agents.list.find((entry) => entry.id === `bf-${botId}`);
-        expect(agent.name).toBe('Alpha Bot');
     });
 
     test('bot config PATCH (live editing)', async () => {
@@ -290,7 +208,7 @@ describe('Bot management API', () => {
         const createRes = await request(app)
             .post('/api/bots')
             .set('Authorization', `Bearer ${token}`)
-            .send(buildBotPayload());
+            .send(buildLegacyBotPayload());
 
         const botId = createRes.body.bot.id;
 
@@ -308,6 +226,46 @@ describe('Bot management API', () => {
         expect(res.body.analytics.totals.messagesSent).toBe(1);
 
         jest.useRealTimers();
+    });
+
+    test('OpenClaw lifecycle is external and legacy-only endpoints are explicit', async () => {
+        const token = await registerAndGetToken(app, { email: 'openclaw@example.com' });
+        const createRes = await request(app)
+            .post('/api/bots')
+            .set('Authorization', `Bearer ${token}`)
+            .send(buildBotPayload());
+
+        const botId = createRes.body.bot.id;
+
+        const startRes = await request(app)
+            .post(`/api/bots/${botId}/start`)
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(startRes.status).toBe(202);
+        expect(startRes.body.executed).toBe(false);
+        expect(startRes.body.status.runtime).toBe('openclaw');
+        expect(startRes.body.status.desiredStatus).toBe('running');
+
+        const logsRes = await request(app)
+            .get(`/api/bots/${botId}/logs`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(logsRes.status).toBe(501);
+        expect(logsRes.body.code).toBe('OPENCLAW_UNSUPPORTED');
+
+        const healthRes = await request(app)
+            .get(`/api/bots/${botId}/health`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(healthRes.status).toBe(501);
+
+        const analyticsRes = await request(app)
+            .get(`/api/bots/${botId}/analytics`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(analyticsRes.status).toBe(501);
+
+        const syncRes = await request(app)
+            .post(`/api/bots/${botId}/commands/sync`)
+            .set('Authorization', `Bearer ${token}`);
+        expect(syncRes.status).toBe(501);
     });
 
     test('auth middleware (missing, invalid, expired token)', async () => {

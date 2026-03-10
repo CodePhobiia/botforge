@@ -461,7 +461,8 @@ function mapBotRow(row) {
         rateLimits: safeJsonParse(row.rate_limits_json, null),
         automodConfig: safeJsonParse(row.automod_config_json, null),
         schedule: safeJsonParse(row.schedule_json, null),
-        engine: row.engine || 'openclaw',
+        engine: row.engine || row.runtime || 'openclaw',
+        runtime: row.engine || row.runtime || 'openclaw',
         openclawAgentId: row.openclaw_agent_id,
         openclawWorkspace: row.openclaw_workspace,
         openclawAgentDir: row.openclaw_agent_dir,
@@ -628,7 +629,7 @@ function createBot(config) {
         rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         automod_config_json: config.automodConfig ? JSON.stringify(config.automodConfig) : null,
         schedule_json: config.schedule ? JSON.stringify(config.schedule) : null,
-        engine: config.engine || 'openclaw',
+        engine: config.engine || config.runtime || 'openclaw',
         openclaw_agent_id: config.openclawAgentId || null,
         openclaw_workspace: config.openclawWorkspace || null,
         openclaw_agent_dir: config.openclawAgentDir || null,
@@ -689,6 +690,7 @@ function updateBot(userId, botId, updates) {
     if (hasProp('automodConfig')) config.automodConfig = updates.automodConfig;
     if (hasProp('schedule')) config.schedule = updates.schedule;
     if (hasProp('engine')) config.engine = updates.engine;
+    if (hasProp('runtime')) config.runtime = updates.runtime;
     if (hasProp('openclawAgentId')) config.openclawAgentId = updates.openclawAgentId;
     if (hasProp('openclawWorkspace')) config.openclawWorkspace = updates.openclawWorkspace;
     if (hasProp('openclawAgentDir')) config.openclawAgentDir = updates.openclawAgentDir;
@@ -716,7 +718,7 @@ function updateBot(userId, botId, updates) {
         rate_limits_json: config.rateLimits ? JSON.stringify(config.rateLimits) : null,
         automod_config_json: config.automodConfig ? JSON.stringify(config.automodConfig) : null,
         schedule_json: config.schedule ? JSON.stringify(config.schedule) : null,
-        engine: config.engine || 'openclaw',
+        engine: config.engine || config.runtime || 'openclaw',
         openclaw_agent_id: config.openclawAgentId || null,
         openclaw_workspace: config.openclawWorkspace || null,
         openclaw_agent_dir: config.openclawAgentDir || null,

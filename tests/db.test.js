@@ -23,6 +23,7 @@ function buildBot(userId, overrides = {}) {
         id: uuidv4(),
         userId,
         name: 'Test Bot',
+        runtime: 'openclaw',
         discordToken: 'discord-token',
         aiProvider: 'openai',
         aiApiKey: 'test-api-key',
@@ -86,6 +87,7 @@ describe('Database', () => {
         const list = db.listBotsByUser(user.id);
         expect(list).toHaveLength(1);
         expect(list[0].id).toBe(bot.id);
+        expect(list[0].runtime).toBe('openclaw');
         expect(list[0].discordToken).toBe(bot.discordToken);
         expect(list[0].engine).toBe('openclaw');
         expect(list[0].openclawAgentId).toBe('bf-test-bot');
