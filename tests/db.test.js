@@ -75,22 +75,36 @@ describe('Database', () => {
         const user = buildUser();
         db.createUser(user);
 
-        const bot = buildBot(user.id);
+        const bot = buildBot(user.id, {
+            engine: 'openclaw',
+            openclawAgentId: 'bf-test-bot',
+            openclawWorkspace: '/tmp/workspace-bf-test-bot',
+            openclawAgentDir: '/tmp/agents/bf-test-bot/agent'
+        });
         db.createBot(bot);
 
         const list = db.listBotsByUser(user.id);
         expect(list).toHaveLength(1);
         expect(list[0].id).toBe(bot.id);
         expect(list[0].discordToken).toBe(bot.discordToken);
+        expect(list[0].engine).toBe('openclaw');
+        expect(list[0].openclawAgentId).toBe('bf-test-bot');
 
         const fetched = db.getBotById(user.id, bot.id);
         expect(fetched).not.toBeNull();
         expect(fetched.name).toBe(bot.name);
+        expect(fetched.openclawWorkspace).toBe('/tmp/workspace-bf-test-bot');
+        expect(fetched.openclawAgentDir).toBe('/tmp/agents/bf-test-bot/agent');
 
-        const updated = db.updateBot(user.id, bot.id, { name: 'Updated Bot', maxTokens: 2048 });
+        const updated = db.updateBot(user.id, bot.id, {
+            name: 'Updated Bot',
+            maxTokens: 2048,
+            openclawWorkspace: '/tmp/workspace-bf-renamed'
+        });
         expect(updated).not.toBeNull();
         expect(updated.name).toBe('Updated Bot');
         expect(updated.maxTokens).toBe(2048);
+        expect(updated.openclawWorkspace).toBe('/tmp/workspace-bf-renamed');
 
         const deleted = db.deleteBot(user.id, bot.id);
         expect(deleted).toBe(true);

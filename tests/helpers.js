@@ -23,6 +23,15 @@ function cleanupDatabaseFiles(dbPath) {
     }
 }
 
+function cleanupDirectory(dirPath) {
+    if (!dirPath || !fs.existsSync(dirPath)) return;
+    try {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+    } catch {
+        // Best-effort cleanup.
+    }
+}
+
 function closeDatabase(dbModule) {
     if (!dbModule || typeof dbModule.initDatabase !== 'function') return;
     try {
@@ -55,12 +64,44 @@ function createTestDatabase() {
     return { db, dbPath, cleanup };
 }
 
+function createTempHomeDir() {
+    const name = `botforge-home-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    return path.join(os.tmpdir(), name);
+}
+
+function createOpenClawFixture(homeDir) {
+    const openclawDir = path.join(homeDir, '.openclaw');
+    const npmBinDir = path.join(homeDir, '.npm-global', 'bin');
+
+    fs.mkdirSync(openclawDir, { recursive: true });
+    fs.mkdirSync(npmBinDir, { recursive: true });
+
+    fs.writeFileSync(
+        path.join(openclawDir, 'openclaw.json'),
+        JSON.stringify({
+            agents: { list: [] },
+            channels: {
+                discord: {
+                    accounts: {}
+                }
+            },
+            bindings: []
+        }, null, 2),
+        'utf-8'
+    );
+}
+
 function createTestApp() {
     const dbPath = createTempDbPath();
+    const homeDir = createTempHomeDir();
+    const previousHome = process.env.HOME;
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = 'test-jwt-secret';
     process.env.BOTFORGE_DB_PATH = dbPath;
     process.env.BOTFORGE_ENCRYPTION_KEY = 'test-encryption-key';
+    process.env.HOME = homeDir;
+
+    createOpenClawFixture(homeDir);
 
     if (typeof jest !== 'undefined' && jest.resetModules) {
         jest.resetModules();
@@ -72,9 +113,15 @@ function createTestApp() {
     const cleanup = () => {
         closeDatabase(db);
         cleanupDatabaseFiles(dbPath);
+        cleanupDirectory(homeDir);
+        if (previousHome === undefined) {
+            delete process.env.HOME;
+        } else {
+            process.env.HOME = previousHome;
+        }
     };
 
-    return { app, db, dbPath, cleanup };
+    return { app, db, dbPath, homeDir, cleanup };
 }
 
 function generateAuthToken(payload = {}, options = {}) {
